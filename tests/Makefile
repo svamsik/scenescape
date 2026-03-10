@@ -198,6 +198,7 @@ ui-tests:
 	$(MAKE) -Otarget _$@ SECRETSDIR=$(PWD)/manager/secrets SUPASS=$(SUPASS) -k
 
 _ui-tests: \
+  rotation \
   show-telemetry-button \
   upload-only-3d-glb-files \
   add-delete-3d-object \
