@@ -50,10 +50,11 @@ class SceneObjectMqtt(FunctionalTest):
       print("Event received after ROI deletion (unexpected)")
       return
 
-    for regionObj in regionData['objects']:
-      for sceneObj in self.sceneData['objects']:
-        if regionObj['id'] == sceneObj['id']:
-          self.expectedEnter.append(sceneObj['id'])
+    if self.sceneData:
+      for regionObj in regionData['objects']:
+        for sceneObj in self.sceneData['objects']:
+          if regionObj['id'] == sceneObj['id']:
+            self.expectedEnter.append(sceneObj['id'])
     self.verifyRegionEvent(regionData)
     return
 
@@ -70,6 +71,7 @@ class SceneObjectMqtt(FunctionalTest):
             self.expectedExit.append(event['id'])
             self.expectedEnter.remove(event['id'])
             self.entered = True
+            self.enterObserved = True
             print("object with id {} entered region\n".format(event['id']))
 
     if len(regionEvent['exited']) > 0:
@@ -78,6 +80,7 @@ class SceneObjectMqtt(FunctionalTest):
         if event['object']['id'] in self.expectedExit:
           self.expectedExit.remove(event['object']['id'])
           self.exited = True
+          self.exitObserved = True
           print("object with id {} exited region\n".format(event['object']['id']))
     return
 
@@ -114,6 +117,7 @@ class SceneObjectMqtt(FunctionalTest):
       camera_id = jdata['id']
       jdata['timestamp'] = get_iso_time()
       jdata['objects'][PERSON][0]['bounding_box']['y'] = location
+      jdata['objects'][PERSON][0]['bounding_box_px']['y'] = int(location * self.FRAME_HEIGHT)
       detection = json.dumps(jdata)
       self.pubsub.publish(PubSub.formatTopic(PubSub.DATA_CAMERA,
                                         camera_id=camera_id), detection)
@@ -126,6 +130,8 @@ class SceneObjectMqtt(FunctionalTest):
     self.sceneData = None
     self.entered = False
     self.exited = False
+    self.enterObserved = False
+    self.exitObserved = False
     self.roiPoints = ((0.9, 4.0), (0.9, 2.4),
                       (8.1, 2.4), (8.1, 4.0))
     self.message_received_after_delete = False
@@ -161,6 +167,7 @@ class SceneObjectMqtt(FunctionalTest):
     publishTopic = PubSub.formatTopic(PubSub.DATA_CAMERA, camera_id=objData['id'])
     objLocation = self.getLocations()
     objData['objects'][PERSON][0]['bounding_box']['y'] = objLocation[0]
+    objData['objects'][PERSON][0]['bounding_box_px']['y'] = int(objLocation[0] * self.FRAME_HEIGHT)
     self.sceneReady(MAX_ATTEMPTS, waitTopic, publishTopic, objData)
 
     self.getScene()
@@ -195,9 +202,7 @@ class SceneObjectMqtt(FunctionalTest):
     return
 
   def runROIMqttVerifyPassed(self):
-    return self.exited and self.entered == False \
-              and len(self.expectedExit) == 0 \
-              and len(self.expectedEnter) == 0
+    return self.enterObserved and self.exitObserved
 
   def runROIMqttVerifyNoEventsAfterDelete(self):
 

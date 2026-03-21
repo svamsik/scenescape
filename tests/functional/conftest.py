@@ -47,8 +47,9 @@ def test_id(request):
   default_id = marker.kwargs.get("default")
   analytics_id = marker.kwargs.get("analytics", default_id)
 
-  analytics_mode = os.getenv("CONTROLLER_ENABLE_ANALYTICS_ONLY", "").lower() == "true"
-
+  analytics_mode = (os.getenv("CONTROLLER_ENABLE_ANALYTICS_ONLY", "").lower() == "true"
+                    or request.config.getoption("analytics_only", default=False))
+  
   return analytics_id if analytics_mode else default_id
   
 @pytest.fixture
@@ -95,6 +96,8 @@ def objData():
     "objects": {},
     "rate": 9.8
   }
+  FRAME_WIDTH = 640
+  FRAME_HEIGHT = 480
   obj = {
     "id": 1,
     "category": "person",
@@ -103,6 +106,12 @@ def objData():
       "y": 0.0,
       "width": 0.24,
       "height": 0.49
+    },
+    "bounding_box_px": {
+      "x": int(0.56 * FRAME_WIDTH),
+      "y": 0,
+      "width": int(0.24 * FRAME_WIDTH),
+      "height": int(0.49 * FRAME_HEIGHT)
     }
   }
   jdata['objects']['person'] = [obj]
