@@ -395,6 +395,14 @@ setup-pytest:
 	@if ! command -v Xvfb > /dev/null 2>&1; then \
 		echo "WARNING: Xvfb is not installed. UI/Selenium tests will fail. See tests/README.md for installation instructions."; \
 	fi
+	@if ! command -v geckodriver > /dev/null 2>&1; then \
+		echo "Installing geckodriver to tests/.venv/bin/..."; \
+		set -e; BASE_URL=https://github.com/mozilla/geckodriver/releases; \
+		GVERSION=v0.36.0; \
+		curl -fSL "$${BASE_URL}/download/$${GVERSION}/geckodriver-$${GVERSION}-linux64.tar.gz" \
+			| tar -xz -C $(CURDIR)/tests/.venv/bin geckodriver; \
+		echo "geckodriver installed."; \
+	fi
 
 .PHONY: run_tests
 run_tests: setup-tests setup-pytest

@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
-
-# SPDX-FileCopyrightText: (C) 2022 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2022 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
+
+import time
 
 from tests.ui.browser import Browser, By
 import tests.ui.common_ui_test_utils as common
@@ -38,7 +38,10 @@ def enter_and_validate_parameters(browser, button_id, initial_value, step):
     value += step
 
   print('Saving changes...')
-  browser.find_element(By.ID, button_id).click()
+  save_button = browser.find_element(By.ID, button_id)
+  browser.execute_script("arguments[0].scrollIntoView({block: 'center'});", save_button)
+  time.sleep(0.5)
+  browser.execute_script("arguments[0].click();", save_button)
 
   assert common.wait_for_elements(browser, camera1_element_id)
   browser.find_element(By.XPATH, camera1_element_id ).click()

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
@@ -135,8 +133,15 @@ class GeospatialIngestPublish(FunctionalTest):
   def verifyTRSMatrix(self):
     res = self.rest.updateScene(self.sceneUID, {'output_lla': True})
     assert res, (res.statusCode, res.errors)
-    time.sleep(MAX_WAIT_TIMEOUT)
-    res = self.rest.getScene(self.sceneUID)
+
+    # Poll for trs_matrix to be computed
+    start_time = time.time()
+    while time.time() - start_time < MAX_WAIT_TIMEOUT * 2:
+      res = self.rest.getScene(self.sceneUID)
+      if 'trs_matrix' in res and res['trs_matrix']:
+        break
+      time.sleep(2)
+
     assert 'trs_matrix' in res and res['trs_matrix']
     res = self.rest.updateScene(self.sceneUID, {'output_lla': False})
     assert 'trs_matrix' not in res

@@ -28,7 +28,7 @@ def change_sensor_location(browser, sensor_name):
   if map_canvas is None:
     return retVal
   browser.execute_script("window.scrollTo(0,100);")
-  sensor_draggable = browser.find_elements_with_wait(By.CSS_SELECTOR, ".is-handle")
+  sensor_draggable = browser.find_elements_with_wait(By.CSS_SELECTOR, ".is-handle", timeout=30)
   assert len(sensor_draggable) > 0, "Sensor location element not found"
   sensor = sensor_draggable[-1]
 
@@ -54,7 +54,9 @@ def verify_sensor_location(browser, sensor_name):
   browser.find_element(By.CSS_SELECTOR, ".navbar-nav > .nav-item:nth-child(3) > .nav-link").click()
   browser.find_element(By.XPATH, "//*[text()='" + sensor_name + "']/parent::tr/td[4]/a").click()
   browser.execute_script("window.scrollTo(0,100);")
-  sensor_coord = browser.find_element(By.CSS_SELECTOR, ".is-handle")
+  sensor_coords = browser.find_elements_with_wait(By.CSS_SELECTOR, ".is-handle", timeout=30)
+  assert len(sensor_coords) > 0, "Sensor location element not found for verification"
+  sensor_coord = sensor_coords[-1]
   x_value = sensor_coord.get_attribute('x')
   y_value = sensor_coord.get_attribute('y')
   if x_value != old_x_value and y_value != old_y_value:

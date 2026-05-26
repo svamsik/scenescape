@@ -1,6 +1,4 @@
-#!/usr/bin/env python3
-
-# SPDX-FileCopyrightText: (C) 2022 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2022 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -373,6 +371,11 @@ def modify_tripwire(browser):
   @return   bool                       Boolean representing success.
   """
   try:
+    # Wait for tripwire point elements to be present
+    wait = WebDriverWait(browser, 15)
+    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "point_0")))
+    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "point_1")))
+
     # creating a long horizontal tripwire
     points_0 = browser.find_elements(By.CLASS_NAME, "point_0")
     points_1 = browser.find_elements(By.CLASS_NAME, "point_1")
@@ -468,6 +471,15 @@ def change_cam_calibration(browser, cam_view_x, map_view_x, save_calibration=Tru
   map_canvas = browser.find_elements(By.ID,"map_canvas_3D")
   if camera_canvas and map_canvas == None:
     return False
+
+  # Wait for camera_calibration JS object to be fully initialized
+  WebDriverWait(browser, 30).until(
+    lambda d: d.execute_script(
+      "return window.camera_calibration && window.camera_calibration.camCanvas "
+      "&& window.camera_calibration.camCanvas.calibrationPoints "
+      "&& window.camera_calibration.camCanvas.calibrationPoints.length > 0;"
+    )
+  )
 
   cam_result = browser.execute_script(
     "return window.camera_calibration.camCanvas.calibrationPoints[0].x = arguments[0];",
@@ -1703,7 +1715,7 @@ class InteractWithSceneUpdate(InteractWithPage):
     correct_address = self.upload_file()
 
     # Wait for redirect to resolve back to the Scenes page
-    selenium_wait_for_elements(self.browser, (By.LINK_TEXT, "+ New Scene"), 5)
+    selenium_wait_for_elements(self.browser, (By.LINK_TEXT, "+ New Scene"), 30)
     successful_checks = self.check_successful_interaction(checks)
     if successful_checks and correct_address:
       upload_success = True

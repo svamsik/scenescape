@@ -12,21 +12,27 @@ Tests support two deployment backends controlled by the `--backend` flag:
 
 ### Host system packages
 
-The following packages must be installed on the host before running `make setup-tests`.
-Install them with `apt-get` (or equivalent for your distribution):
+Run these commands once before `make setup-tests`:
 
-| Package         | Minimum version | Required for         | Install command                              |
-| --------------- | --------------- | -------------------- | -------------------------------------------- |
-| `firefox`       | 150.0.2         | UI / Selenium tests  | `sudo apt-get install -y firefox`            |
-| `geckodriver`   | 0.36.0          | UI / Selenium tests  | Check https://github.com/mozilla/geckodriver |
-| `xvfb`          | 21.1            | UI / Selenium tests  | `sudo apt-get install -y xvfb`               |
-| `libopencv-dev` | 4.6             | `robot_vision` build | `sudo apt-get install -y libopencv-dev`      |
-| `libeigen3-dev` | 3.4             | `robot_vision` build | `sudo apt-get install -y libeigen3-dev`      |
+```bash
+# 1. System packages needed for UI/Selenium tests and C++ extensions
+sudo apt-get install -y xvfb libopencv-dev libeigen3-dev
 
-> **Note**: `firefox` and `xvfb` are only needed when running UI/Selenium tests.
-> `libopencv-dev` and `libeigen3-dev` are required to compile the `robot_vision`
-> C++ extension used by tracker metric and scene tests.
-> On Ubuntu, Firefox must be installed via apt — the snap version is not compatible with Selenium.
+# 2. Firefox — must be the real deb, not the snap-backed stub Ubuntu ships by default
+sudo install -d -m 0755 /etc/apt/keyrings
+wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | \
+  sudo tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | \
+  sudo tee /etc/apt/sources.list.d/mozilla.list > /dev/null
+echo 'Package: *
+Pin: origin packages.mozilla.org
+Pin-Priority: 1001' | sudo tee /etc/apt/preferences.d/mozilla-firefox
+sudo apt-get update && sudo apt-get install -y --allow-downgrades firefox
+```
+
+> `geckodriver` is downloaded and installed automatically into `tests/.venv/bin/` by `make setup-pytest` — no manual step needed.
+>
+> `firefox` and `xvfb` are only needed for UI/Selenium tests. `libopencv-dev` and `libeigen3-dev` are only needed to build the `robot_vision` C++ extension used by tracker and scene tests.
 
 ### Docker backend
 

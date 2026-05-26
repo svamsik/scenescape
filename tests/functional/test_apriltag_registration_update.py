@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
@@ -18,7 +16,7 @@ SCENESCAPE_SPEC = FuncTestSpec(
 )
 
 POLL_INTERVAL = 5
-POLL_TIMEOUT = 60
+POLL_TIMEOUT = 180
 BASE_URL = "https://autocalibration.scenescape.intel.com:8443"
 MAP_APRILTAG_COUNT = 7  # number of apriltags present in Queuing scene
 

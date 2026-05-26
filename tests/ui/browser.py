@@ -64,7 +64,8 @@ class Browser(Firefox):
 
     options.add_argument("--width=1080")
     options.add_argument("--height=1920")
-    options.set_preference("webgl.disabled", True)
+    options.set_preference("webgl.disabled", False)
+    options.set_preference("webgl.force-enabled", True)
     options.set_preference("media.hardware-video-decoding.enabled", False)
     options.set_preference("gfx.webrender.software", True)
     options.set_preference("network.proxy.type", 0)
@@ -87,7 +88,8 @@ class Browser(Firefox):
     geckodriver_path = shutil.which("geckodriver")
     if not geckodriver_path:
       raise RuntimeError(
-        "geckodriver not found. Run 'make setup-tests' to install it."
+        "geckodriver not found. Run 'make setup-pytest' to install it, "
+        "or download it manually from https://github.com/mozilla/geckodriver"
       )
     service = Service(geckodriver_path)
 

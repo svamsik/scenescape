@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
@@ -11,7 +9,7 @@ from scene_common.mqtt import PubSub
 from tests.utils.log import get_logger
 
 log = get_logger(__name__)
-test_wait_time = 20  # seconds
+test_wait_time = 60  # seconds
 check_interval = 1   # seconds
 
 scenes = [

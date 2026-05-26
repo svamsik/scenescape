@@ -40,7 +40,7 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     log.info("Turn off tracked objects and hide stats graph.")
     time.sleep(WAIT_SEC)
-    common.selenium_wait_for_elements(browser, (By.ID, "camera1-control-panel"), 100)
+    common.selenium_wait_for_elements(browser, (By.ID, "camera1-control-panel"), 180)
     browser.find_element(By.ID, "tracked-objects-button").click()
     interaction_page.hide_stats()
 

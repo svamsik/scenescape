@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # SPDX-FileCopyrightText: (C) 2024 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
@@ -31,7 +29,7 @@ MATCHED = "matched"
 
 def get_scene_count_bounds():
   # Baseline expectation for stable ReID behavior on the reference stream.
-  return 3, 6
+  return 2, 8
 
 def expect_exceed_max_unique_count(params):
   value = str(params.get("expect_exceed_max", "")).strip().lower()

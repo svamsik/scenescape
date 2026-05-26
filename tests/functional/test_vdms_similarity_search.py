@@ -1,6 +1,4 @@
-#!/usr/bin/env python3
-
-# SPDX-FileCopyrightText: (C) 2024 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2024 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -54,14 +52,14 @@ class VDMSSimilaritySearch(BackendFunctionalTest):
 
     descriptor_1 = {
       "AddDescriptor": {
-        "set": "reid_vector",
+        "set": "reid_vectors",
         "label": "Person 1"
       }
     }
 
     descriptor_2 = {
       "AddDescriptor": {
-        "set": "reid_vector",
+        "set": "reid_vectors",
         "label": "Person 2"
       }
     }

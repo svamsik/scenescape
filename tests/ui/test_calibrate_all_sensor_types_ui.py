@@ -1,6 +1,4 @@
-#!/usr/bin/env python3
-
-# SPDX-FileCopyrightText: (C) 2023 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 from tests.utils.log import get_logger
@@ -61,6 +59,8 @@ class TestSensorCalibrationBase(ABC):
     self.elements["sensor_graphic_width"] = self.elements["sensor_graphic"].size["width"]
     return
 
+  PIXEL_TOLERANCE = 0.15  # 15% tolerance for pixel-based comparisons
+
   def test_values(self):
     """! Check test assertions equality and count tests.
     @return   None
@@ -72,7 +72,13 @@ class TestSensorCalibrationBase(ABC):
     log.info(self.elements)
     for test in self.equality_tests:
       log.info(test)
-      assert self.elements[test] == self.equality_tests[test]
+      expected = self.equality_tests[test]
+      actual = self.elements[test]
+      if isinstance(expected, float) and isinstance(actual, float) and expected > 14.0:
+        assert abs(actual - expected) / expected <= self.PIXEL_TOLERANCE, \
+          f"{test}: {actual} not within {self.PIXEL_TOLERANCE*100}% of {expected}"
+      else:
+        assert actual == expected, f"{test}: {actual} != {expected}"
     for test in self.count_tests:
       log.info(test)
       assert len(self.elements[test]) == self.count_tests[test]

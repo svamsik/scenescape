@@ -39,6 +39,7 @@ def test_sensor_area_main(params, record_xml_attribute):
     print("Navigating to sensor edit tab ...")
     browser.find_element(By.LINK_TEXT, "Sensors").click()
     browser.find_element(By.XPATH, "//*[text()='" + sensor_name + "']/parent::tr/td[4]/a").click()
+    time.sleep(2)
     get_radio = browser.find_elements(By.XPATH, "//*[@type='radio']")
     count_radio = len(get_radio)
     radio_list = []
@@ -103,7 +104,7 @@ def validate_polygon_sensor_area(browser):
 
 def validate_circular_sensor_area(browser):
   browser.find_element(By.ID, "id_area_1").click()
-  wait = WebDriverWait(browser, 2)
+  wait = WebDriverWait(browser, 10)
   circle_area = wait.until(
       EC.presence_of_element_located((By.CLASS_NAME, "sensor_r"))
   )
@@ -115,6 +116,7 @@ def validate_circular_sensor_area(browser):
   action.click_and_hold(slider).move_by_offset(40, 0).release().perform()
   save_circle = browser.find_element(By.NAME, "save")
   save_circle.click()
+  time.sleep(2)
 
   wait.until(EC.element_to_be_clickable((By.ID, "sensors-tab"))).click()
   wait.until(
