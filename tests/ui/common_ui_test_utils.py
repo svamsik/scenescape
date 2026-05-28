@@ -1,4 +1,6 @@
-# SPDX-FileCopyrightText: (C) 2022 - 2026 Intel Corporation
+#!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: (C) 2022 - 2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -471,15 +473,6 @@ def change_cam_calibration(browser, cam_view_x, map_view_x, save_calibration=Tru
   map_canvas = browser.find_elements(By.ID,"map_canvas_3D")
   if camera_canvas and map_canvas == None:
     return False
-
-  # Wait for camera_calibration JS object to be fully initialized
-  WebDriverWait(browser, 30).until(
-    lambda d: d.execute_script(
-      "return window.camera_calibration && window.camera_calibration.camCanvas "
-      "&& window.camera_calibration.camCanvas.calibrationPoints "
-      "&& window.camera_calibration.camCanvas.calibrationPoints.length > 0;"
-    )
-  )
 
   cam_result = browser.execute_script(
     "return window.camera_calibration.camCanvas.calibrationPoints[0].x = arguments[0];",

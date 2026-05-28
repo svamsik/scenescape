@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-# SPDX-FileCopyrightText: (C) 2022 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2022 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import random
 import time
+from selenium.common.exceptions import UnexpectedAlertPresentException
 from tests.ui.browser import Browser, By
 import tests.ui.common_ui_test_utils as common
 from tests.utils.log import get_logger
@@ -28,7 +29,15 @@ def reset_perspective(browser):
   try:
     browser.find_element(By.ID, "reset_points").click()
     time.sleep(TEST_WAIT_TIME)
-    browser.find_element(By.NAME, "calibrate_save").click()
+    try:
+      browser.find_element(By.NAME, "calibrate_save").click()
+    except UnexpectedAlertPresentException:
+      # After reset, there are 0 calibration points, so saving triggers
+      # an alert.  Accept it and continue.
+      try:
+        browser.switch_to.alert.accept()
+      except Exception:
+        pass
     log.info("Perspective has been reset!")
     return True
   except Exception as e:

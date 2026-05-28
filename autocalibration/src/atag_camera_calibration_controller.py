@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: (C) 2023 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import base64
@@ -107,7 +107,8 @@ class ApriltagCameraCalibrationController(CameraCalibrationController):
     @return  None
     """
     response = self.calibration_data_interface.calibration_markers_with_scene_id(scene.id)
-    if 'results' in response:
+    apriltags = []
+    if response and 'results' in response:
       apriltags = response['results']
     if apriltags and len(atag_points_3d) < len(apriltags):
       self.calibration_data_interface.delete_calibration_markers_for_scene(scene.id)

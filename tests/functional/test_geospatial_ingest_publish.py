@@ -131,7 +131,14 @@ class GeospatialIngestPublish(FunctionalTest):
     assert res, (res.statusCode, res.errors)
 
   def verifyTRSMatrix(self):
-    res = self.rest.updateScene(self.sceneUID, {'output_lla': True})
+    map_image = f"{self.repoRoot}/sample_data/HazardZoneSceneLarge.png"
+    with open(map_image, "rb") as f:
+      map_data = f.read()
+    res = self.rest.updateScene(self.sceneUID, {
+      'output_lla': True,
+      'map_corners_lla': json.dumps(MAP_CORNERS_LLA),
+      'map': (map_image, map_data),
+    })
     assert res, (res.statusCode, res.errors)
 
     # Poll for trs_matrix to be computed

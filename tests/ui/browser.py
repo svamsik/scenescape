@@ -58,6 +58,8 @@ class Browser(Firefox):
     if headless:
       os.environ["MOZ_HEADLESS"] = "1"
 
+    os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
+
     options = Options()
     if headless:
       options.add_argument("--headless")
@@ -66,6 +68,7 @@ class Browser(Firefox):
     options.add_argument("--height=1920")
     options.set_preference("webgl.disabled", False)
     options.set_preference("webgl.force-enabled", True)
+    options.set_preference("webgl.enable-webgl2", True)
     options.set_preference("media.hardware-video-decoding.enabled", False)
     options.set_preference("gfx.webrender.software", True)
     options.set_preference("network.proxy.type", 0)

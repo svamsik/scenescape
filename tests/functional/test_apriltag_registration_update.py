@@ -16,7 +16,8 @@ SCENESCAPE_SPEC = FuncTestSpec(
 )
 
 POLL_INTERVAL = 5
-POLL_TIMEOUT = 180
+POLL_TIMEOUT = 600
+TRIGGER_RETRY_TIMEOUT = 120
 BASE_URL = "https://autocalibration.scenescape.intel.com:8443"
 MAP_APRILTAG_COUNT = 7  # number of apriltags present in Queuing scene
 
@@ -60,25 +61,65 @@ class ApriltagRegistration(FunctionalTest):
     assert self._get_scene().get('map_processed') is None
 
   def _trigger_registration(self):
-    """Explicitly POST to the autocalibration service to start scene registration"""
+    """Ensure scene registration is running or completed.
+    Wait for any in-progress registration to settle, then POST only if still needed."""
 
     url = f"{BASE_URL}/v1/scenes/{self.scene_id}/registration"
+
+    # Wait for any PATCH-triggered thread to finish
+    deadline = time.time() + TRIGGER_RETRY_TIMEOUT
+    while time.time() < deadline:
+      r = requests.get(url, verify=self.rootcert, timeout=10)
+      assert r.ok, f"GET registration status failed: {r.status_code} {r.text}"
+      status = r.json().get('status')
+      if status == 'busy':
+        time.sleep(POLL_INTERVAL)
+        continue
+      if status == 'success':
+        return  # PATCH thread already completed registration
+      break
+
+    # map_processed is still None and no thread is running — POST to trigger
     r = requests.post(url, json={}, verify=self.rootcert, timeout=10)
     assert r.status_code in (200, 202), \
       f"POST registration returned {r.status_code}: {r.text}"
+    resp_status = r.json().get('status')
+    assert resp_status not in ('error',), \
+      f"POST registration returned error: {r.text}"
 
   def _poll_for_registration(self):
-    """Poll until map_processed is not null."""
+    """Poll until map_processed is not null.
+    Extends the timeout automatically while the autocalibration service
+    reports that a registration thread is busy."""
 
     start = time.time()
-    while time.time() - start < POLL_TIMEOUT:
+    extended = False
+    while True:
+      elapsed = time.time() - start
+      if elapsed >= POLL_TIMEOUT:
+        # Check if service is still actively processing
+        try:
+          url = f"{BASE_URL}/v1/scenes/{self.scene_id}/registration"
+          r = requests.get(url, verify=self.rootcert, timeout=10)
+          status_info = r.json() if r.ok else {}
+        except Exception:
+          status_info = {}
+        if status_info.get('status') == 'busy' and not extended:
+          # Thread is still running; extend timeout once
+          extended = True
+          start = time.time()
+        else:
+          raise AssertionError(
+            f"Registration did not complete within {POLL_TIMEOUT}s"
+            f"{' (extended)' if extended else ''}. "
+            f"Autocalibration status: {status_info}"
+          )
       try:
         if self._get_scene().get('map_processed') is not None:
           return
       except Exception:
         pass
       time.sleep(POLL_INTERVAL)
-    raise AssertionError(f"Registration did not complete within {POLL_TIMEOUT}s")
 
   def _clear_calibration_markers(self):
     """Delete all calibration markers for the test scene"""

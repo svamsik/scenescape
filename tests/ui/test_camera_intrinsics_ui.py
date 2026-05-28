@@ -41,7 +41,13 @@ def enter_and_validate_parameters(browser, button_id, initial_value, step):
   save_button = browser.find_element(By.ID, button_id)
   browser.execute_script("arguments[0].scrollIntoView({block: 'center'});", save_button)
   time.sleep(0.5)
-  browser.execute_script("arguments[0].click();", save_button)
+  # Submit the enclosing form to ensure proper form submission + redirect
+  browser.execute_script(
+    "var form = arguments[0].closest('form'); "
+    "if (form) { form.submit(); } else { arguments[0].click(); }",
+    save_button
+  )
+  time.sleep(2)
 
   assert common.wait_for_elements(browser, camera1_element_id)
   browser.find_element(By.XPATH, camera1_element_id ).click()
@@ -71,6 +77,7 @@ def test_camera_intrinsics_main(params, record_xml_attribute):
   TEST_NAME = "NEX-T10415"
   record_xml_attribute("name", TEST_NAME)
   exit_code = 1
+  browser = None
 
   try:
     print("Executing: " + TEST_NAME)
@@ -88,7 +95,8 @@ def test_camera_intrinsics_main(params, record_xml_attribute):
     exit_code = 0
 
   finally:
-    browser.close()
+    if browser is not None:
+      browser.close()
     common.record_test_result(TEST_NAME, exit_code)
 
   assert exit_code == 0

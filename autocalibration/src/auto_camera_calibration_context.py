@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: (C) 2023 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import json
@@ -70,6 +70,8 @@ class CameraCalibrationContext:
         response_dict = self.scene_strategies[sceneobj.camera_calibration].process_scene_for_calibration(sceneobj, map_update)
       except (FileNotFoundError, KeyError) as e:
         log.error(f"Error in register dataset : {e}")
+      except Exception as e:
+        log.error(f"Unexpected error processing scene {sceneobj.name}: {e}", exc_info=True)
     self.current_processing_scene = {}
     return
 
