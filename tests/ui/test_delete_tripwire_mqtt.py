@@ -1,6 +1,4 @@
-#!/usr/bin/env python3
-
-# SPDX-FileCopyrightText: (C) 2022 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2022 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -49,27 +47,46 @@ def eventReceived(pahoClient, userdata, message):
 def verify_message_mqtt(client):
   global is_receiving_message
   is_receiving_message = False
-  current_line = 0
-  data = open(GOOD_DATA_PATH, 'r')
-  g_data = data.readlines()
 
-  for line in g_data:
-    if line.startswith( '#' ):
-      pass
-    else:
+  with open(GOOD_DATA_PATH, 'r') as data:
+    g_data = [line for line in data.readlines() if not line.startswith('#')]
+
+  if not g_data:
+    return is_receiving_message
+
+  first = json.loads(g_data[0].strip())
+  camera_id = first['id']
+  publishTopic = PubSub.formatTopic(PubSub.DATA_CAMERA, camera_id=camera_id)
+  # Wait for category to appear on the scene data topic before sending the full sequence.
+  wait_topic = PubSub.formatTopic(PubSub.DATA_SCENE,
+                                  scene_id=common.TEST_SCENE_ID,
+                                  thing_type=OBJECT_CATEGORY)
+  ready = common.wait_for_scene_ready(client, first, publishTopic, wait_topic)
+  if not ready:
+    print("verify_message_mqtt: scene controller did not produce tracking "
+          "output within timeout; publishing sequence anyway")
+
+  # Publish the full sequence multiple times so that transient
+  # tracker dropouts do not silently swallow the only crossing in the data.
+  for attempt in range(3):
+    if is_receiving_message:
+      break
+    for current_line, line in enumerate(g_data):
       jdata = json.loads(line.strip())
       camera_id = jdata['id']
       jdata['timestamp'] = get_iso_time()
-      line = json.dumps(jdata)
-
-      print('Sending frame {} id {}'.format(current_line, camera_id))
+      print('Sending frame {} id {} (attempt {})'.format(
+        current_line, camera_id, attempt + 1))
       client.publish(PubSub.formatTopic(PubSub.DATA_CAMERA, camera_id=camera_id),
-                      line.strip())
-
+                      json.dumps(jdata))
       time.sleep(1/10)
-      current_line += 1
+      if is_receiving_message:
+        break
 
-  data.close()
+  # Allow a final moment for the in-flight crossing event to be delivered to
+  # callback before the caller asserts.
+  if not is_receiving_message:
+    time.sleep(1.0)
   return is_receiving_message
 
 def getTripwireUid(rest, tw_name):
@@ -81,7 +98,7 @@ def getTripwireUid(rest, tw_name):
 def test_create_and_delete_tripwire_mqtt(params, record_xml_attribute):
   """! This function creates Trip wire horizontally and the data is published
   such that the object (category ["custom_person"]) moves vertically across the
-  tripwrire triggerring event data. The tripwire is deleted and the object data
+  tripwire triggerring event data. The tripwire is deleted and the object data
   is published to the mqtt server and awaiting for the response. The MQTT server
   should not give any response else the test fails.
 

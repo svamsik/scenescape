@@ -31,7 +31,7 @@ def test_scene_control_panel(params, record_xml_attribute):
     log.info("Executing: " + TEST_NAME)
     log.info("Test for scene control panel in 3D UI")
 
-    browser = Browser()
+    browser = Browser(webgl=True)
     assert common.check_page_login(browser, params)
     assert common.check_db_status(browser)
 
@@ -41,6 +41,8 @@ def test_scene_control_panel(params, record_xml_attribute):
     log.info("Turn off tracked objects and hide stats graph.")
     time.sleep(WAIT_SEC)
     common.selenium_wait_for_elements(browser, (By.ID, "camera1-control-panel"), 100)
+    assert interaction_page.wait_for_3d_scene_rendered(timeout=60), \
+      "3D scene did not render visible content within timeout"
     browser.find_element(By.ID, "tracked-objects-button").click()
     interaction_page.hide_stats()
 
@@ -50,7 +52,7 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     log.info("Take first floor plane screenshot.")
     time.sleep(WAIT_SEC)
-    plane_view_1 = interaction_page.get_page_screenshot()
+    plane_view_1 = interaction_page.get_canvas_screenshot()
 
     log.info("Unhide 3D panels.")
     time.sleep(WAIT_SEC)
@@ -66,7 +68,7 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     log.info("Take second floor plane screenshot.")
     time.sleep(WAIT_SEC)
-    plane_view_2 = interaction_page.get_page_screenshot()
+    plane_view_2 = interaction_page.get_canvas_screenshot()
 
     log.info("AC(1) Check if floor plane screenshots are different.")
     assert not common.are_images_similar(plane_view_1, plane_view_2, 0.7)
@@ -88,7 +90,7 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     log.info("Take first 3D screenshot.")
     time.sleep(WAIT_SEC)
-    screen_3d_1 = interaction_page.get_page_screenshot()
+    screen_3d_1 = interaction_page.get_canvas_screenshot()
 
     log.info("AC(1) Check if floor plane screenshot is identical after toggling back on.")
     assert common.are_images_similar(plane_view_1, screen_3d_1)
@@ -107,7 +109,7 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     log.info("Take second 3D screenshot.")
     time.sleep(WAIT_SEC)
-    screen_3d_2 = interaction_page.get_page_screenshot()
+    screen_3d_2 = interaction_page.get_canvas_screenshot()
 
     log.info("AC(4) Check if 3D screenshots are different.")
     assert not common.are_images_similar(screen_3d_1, screen_3d_2)
@@ -128,7 +130,7 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     log.info("Take third 3D screenshot.")
     time.sleep(WAIT_SEC)
-    screen_3d_3 = interaction_page.get_page_screenshot()
+    screen_3d_3 = interaction_page.get_canvas_screenshot()
 
     log.info("AC(5) Check if 3D screenshots are identical.")
     assert common.are_images_similar(screen_3d_1, screen_3d_3)
@@ -145,7 +147,7 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     log.info("Take first 2D screenshot.")
     time.sleep(WAIT_SEC)
-    screen_2d_1 = interaction_page.get_page_screenshot()
+    screen_2d_1 = interaction_page.get_canvas_screenshot()
 
     log.info("Change map perspective.")
     time.sleep(WAIT_SEC)
@@ -153,7 +155,7 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     log.info("Take second 2D screenshot.")
     time.sleep(WAIT_SEC)
-    screen_2d_2 = interaction_page.get_page_screenshot()
+    screen_2d_2 = interaction_page.get_canvas_screenshot()
 
     log.info("AC(3) Check if 2D screenshots are identical.")
     assert common.are_images_similar(screen_2d_1, screen_2d_2)
@@ -170,7 +172,7 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     log.info("Take first 2D/3D screenshot.")
     time.sleep(WAIT_SEC)
-    screen_2d_3d_1 = interaction_page.get_page_screenshot()
+    screen_2d_3d_1 = interaction_page.get_canvas_screenshot()
 
     log.info("Change map perspective.")
     time.sleep(WAIT_SEC)
@@ -194,7 +196,7 @@ def test_scene_control_panel(params, record_xml_attribute):
     log.info("Take second 2D/3D screenshot.")
     time.sleep(WAIT_SEC)
 
-    screen_2d_3d_2 = interaction_page.get_page_screenshot()
+    screen_2d_3d_2 = interaction_page.get_canvas_screenshot()
 
     log.info("AC(3) Check if 2D and 3D screenshots are similar (2D perspective is slightly different).")
     assert common.are_images_similar(screen_2d_3d_1, screen_2d_3d_2, 0.8)

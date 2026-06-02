@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # SPDX-FileCopyrightText: (C) 2022 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
@@ -478,7 +476,8 @@ def _inject_options(config, spec, secrets_dir, supass, env=None):
 # ---------------------------------------------------------------------------
 
 def _compose_lifecycle(profile, repo_root, secrets_dir, supass, tmp_path_factory,
-                       exampledb="", collect_container_logs_mode="failed"):
+                       exampledb="", collect_container_logs_mode="failed",
+                       visibility_topic="regulated"):
   """Start a Docker Compose stack for a profile; yield ScenescapeEnv; tear down.
 
   This is a generator meant to be called via ``yield from`` in
@@ -539,8 +538,8 @@ def _compose_lifecycle(profile, repo_root, secrets_dir, supass, tmp_path_factory
     f"DATABASE_PASSWORD={database_password}\n"
     f"UID={os.getuid()}\n"
     f"GID={os.getgid()}\n"
-    f"VISIBILITY=regulated\n"
-    f"VISIBILITY_TOPIC=regulated\n"
+    f"VISIBILITY={visibility_topic}\n"
+    f"VISIBILITY_TOPIC={visibility_topic}\n"
   )
   # Only set DLSTREAMER_VERSION when detected; omitting lets compose defaults apply.
   if dlstreamer_version:
@@ -657,20 +656,31 @@ class _ComposeManager:
     self._secrets_dir = secrets_dir
     self._supass = supass
     self._tmp_path_factory = tmp_path_factory
-    self._current_profile_name = None
+    self._current_stack_key = None  # (profile.name, visibility_topic)
     self._current_env = None
     self._current_gen = None  # active _compose_lifecycle generator
-    self._failed_profiles = {}  # profile name -> exception message
+    self._failed_stacks = {}  # stack key -> exception message
 
-  def get_env(self, profile):
-    """Return a ScenescapeEnv for *profile*, reusing or restarting as needed."""
-    if profile.name in self._failed_profiles:
+  def get_env(self, spec):
+    """Return a ScenescapeEnv for *spec*, reusing or restarting as needed."""
+    profile = spec.profile
+    visibility_topic = "regulated"
+    if spec.extra_args:
+      args = spec.extra_args
+      for i in range(len(args) - 1):
+        if args[i] == "--visibility_topic":
+          visibility_topic = args[i + 1]
+          break
+
+    stack_key = (profile.name, visibility_topic)
+
+    if stack_key in self._failed_stacks:
       pytest.fail(
-        f"Profile {profile.name!r} already failed to start: "
-        f"{self._failed_profiles[profile.name]}"
+        f"Profile {profile.name!r} (visibility={visibility_topic!r}) already failed to start: "
+        f"{self._failed_stacks[stack_key]}"
       )
 
-    if self._current_profile_name == profile.name:
+    if self._current_stack_key == stack_key:
       return self._current_env
 
     self._stop_current()
@@ -679,17 +689,18 @@ class _ComposeManager:
     gen = _compose_lifecycle(
       profile, self._repo_root, self._secrets_dir,
       self._supass, self._tmp_path_factory, exampledb=exampledb,
+      visibility_topic=visibility_topic,
     )
     try:
       env = next(gen)
     except Exception as exc:
       gen.close()
-      self._failed_profiles[profile.name] = str(exc)
+      self._failed_stacks[stack_key] = str(exc)
       raise
 
     self._current_gen = gen
     self._current_env = env
-    self._current_profile_name = profile.name
+    self._current_stack_key = stack_key
     return env
 
   def _stop_current(self):
@@ -698,7 +709,7 @@ class _ComposeManager:
       self._current_gen.close()  # triggers finally block in _compose_lifecycle
       self._current_gen = None
       self._current_env = None
-      self._current_profile_name = None
+      self._current_stack_key = None
 
   def teardown(self):
     """Tear down at session end."""
@@ -829,7 +840,7 @@ def scenescape_env(request, _compose_manager, secrets_dir, supass,
       pytest.skip("python-on-whales not installed; run from host venv")
     if _compose_manager is None:
       pytest.skip("Docker Compose manager not available")
-    env = _compose_manager.get_env(spec.profile)
+    env = _compose_manager.get_env(spec)
     _inject_options(request.config, spec, secrets_dir, supass, env=env)
 
   # Track that this test used the environment for cleanup scheduling.

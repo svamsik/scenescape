@@ -80,7 +80,7 @@ def test_sensor_location_main(params, record_xml_attribute):
   try:
     print("Executing: " + TEST_NAME)
     print("Test setting a sensor location in the scene")
-    browser = Browser()
+    browser = Browser(webgl=True)
     assert common.check_page_login(browser, params)
     assert common.check_db_status(browser)
 

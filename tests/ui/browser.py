@@ -48,23 +48,32 @@ def _find_firefox_binary():
   )
 
 class Browser(Firefox):
-  def __init__(self, headless=True):
+  def __init__(self, headless=True, webgl=False):
     # Remove proxy settings safely
     for key in list(os.environ):
       if 'proxy' in key.lower():
         os.environ.pop(key, None)
 
+    effective_headless = headless and not webgl
+
     # Make headless explicit for Firefox in CI
-    if headless:
+    if effective_headless:
       os.environ["MOZ_HEADLESS"] = "1"
+    else:
+      os.environ.pop("MOZ_HEADLESS", None)
 
     options = Options()
-    if headless:
+    if effective_headless:
       options.add_argument("--headless")
 
     options.add_argument("--width=1080")
     options.add_argument("--height=1920")
-    options.set_preference("webgl.disabled", True)
+    if webgl:
+      options.set_preference("webgl.disabled", False)
+      options.set_preference("webgl.force-enabled", True)
+      options.set_preference("webgl.force-layers-readback", True)
+    else:
+      options.set_preference("webgl.disabled", True)
     options.set_preference("media.hardware-video-decoding.enabled", False)
     options.set_preference("gfx.webrender.software", True)
     options.set_preference("network.proxy.type", 0)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# SPDX-FileCopyrightText: (C) 2023 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 from tests.utils.log import get_logger
@@ -39,7 +39,9 @@ def test_manual_camera_calibration(params, record_xml_attribute):
   try:
     log.info("Executing: " + TEST_NAME)
     log.info("Test that camera pose can be be set manually")
-    browser = Browser()
+    # The 3D map viewport uses THREE.WebGLRenderer, which requires WebGL
+    # to be enabled in headless Firefox.
+    browser = Browser(webgl=True)
     assert common.check_page_login(browser, params)
     assert common.check_db_status(browser)
 

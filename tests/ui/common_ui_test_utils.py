@@ -1,6 +1,4 @@
-#!/usr/bin/env python3
-
-# SPDX-FileCopyrightText: (C) 2022 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -25,6 +23,8 @@ from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from skimage.metrics import structural_similarity as ssim
 
+from scene_common.mqtt import PubSub
+from scene_common.timestamp import get_iso_time
 from tests.common_test_utils import record_test_result
 from tests.ui.browser import Browser, By, NoSuchElementException
 
@@ -373,6 +373,14 @@ def modify_tripwire(browser):
   @return   bool                       Boolean representing success.
   """
   try:
+    # The tripwire drag handles are only rendered after the tripwires tab is
+    # opened and the SVG overlay has been populated.
+    browser.find_element(By.ID, "tripwires-tab").click()
+    wait = WebDriverWait(browser, BROWSER_WAIT)
+    wait.until(EC.presence_of_element_located((By.ID, "svgout")))
+    wait.until(lambda b: len(b.find_elements(By.CLASS_NAME, "point_0")) > 0
+                         and len(b.find_elements(By.CLASS_NAME, "point_1")) > 0)
+
     # creating a long horizontal tripwire
     points_0 = browser.find_elements(By.CLASS_NAME, "point_0")
     points_1 = browser.find_elements(By.CLASS_NAME, "point_1")
@@ -380,15 +388,19 @@ def modify_tripwire(browser):
     point_1 = points_1[-1]
 
     action = browser.actionChains()
-    action.drag_and_drop_by_offset(point_0, -100, 0).perform()
-    action.drag_and_drop_by_offset(point_1, 200, 0).perform()
+    # Nudge each endpoint slightly inward (small, symmetric).
+    action.drag_and_drop_by_offset(point_0, 30, 0).perform()
+    action.drag_and_drop_by_offset(point_1, -30, 0).perform()
     print("Moved the ends of tripwire")
 
     browser.find_element(By.ID,"save-trips").click()
     print("clicked 'Save Regions and Tripwires'")
 
   except Exception as e:
-    print("Failed modifying tripwire!, error: ", e)
+    # Surface the real error so the assertion message is actionable.
+    import traceback
+    print(f"Failed modifying tripwire! error: {e!r}")
+    traceback.print_exc()
     return False
   return True
 
@@ -469,6 +481,21 @@ def change_cam_calibration(browser, cam_view_x, map_view_x, save_calibration=Tru
   if camera_canvas and map_canvas == None:
     return False
 
+  # Wait until calibration JS has finished initialising and populated the in-memory
+  # state. Clicking 'cam_calibrate_1' navigates to a new page, so calibrationPoints
+  # and the viewport scene graph are not available until calibration.js runs.
+  WebDriverWait(browser, 30).until(
+    lambda b: b.execute_script(
+      "return !!(window.camera_calibration"
+      " && window.camera_calibration.camCanvas"
+      " && window.camera_calibration.camCanvas.calibrationPoints"
+      " && window.camera_calibration.camCanvas.calibrationPoints.length > 0"
+      " && window.camera_calibration.viewport"
+      " && window.camera_calibration.viewport.children"
+      " && window.camera_calibration.viewport.children.length > 3);"
+    )
+  )
+
   cam_result = browser.execute_script(
     "return window.camera_calibration.camCanvas.calibrationPoints[0].x = arguments[0];",
     cam_view_x
@@ -481,11 +508,50 @@ def change_cam_calibration(browser, cam_view_x, map_view_x, save_calibration=Tru
 
   print("Changed the Camera Perspective")
   if save_calibration:
+    # Accept the Camera updated alert and wait for
+    # the navigation before any subsequent interaction.
+    save_url = browser.current_url
     browser.find_element(By.NAME,"calibrate_save").click()
     print("clicked 'Save Calibration'")
+    if not wait_for_save_complete(browser, 30, save_url):
+      print("Save did not complete within timeout (alert or navigation missing)")
+      return False
   else:
     print("It has been chosen not to save the calibration changes.")
   return True
+
+def wait_for_save_complete(browser, wait_time, current_url):
+  """! Dismisses the "Camera updated" alert from setupSaveCameraButton, then
+  waits for the form.submit() navigation to leave the calibrate page.
+  @param    browser      Object wrapping the Selenium driver.
+  @param    wait_time    Int seconds to wait.
+  @param    current_url  String URL of the calibration page being submitted.
+  @return   BOOL         True if save+navigation completed within timeout.
+  """
+  from selenium.common.exceptions import NoAlertPresentException
+  deadline = time.time() + wait_time
+  alert_handled = False
+  while time.time() < deadline:
+    if not alert_handled:
+      try:
+        alert = browser.switch_to.alert
+        text = alert.text
+        alert.accept()
+        alert_handled = True
+        print(f"wait_for_save_complete: accepted alert: {text!r}")
+        continue
+      except NoAlertPresentException:
+        pass
+      except Exception:
+        pass
+    try:
+      url = browser.current_url
+    except Exception:
+      url = current_url
+    if url != current_url:
+      return True
+    time.sleep(0.5)
+  return False
 
 def check_cam_calibration(browser, not_expected_cam=(0, 0), not_expected_map=(0, 0)):
   """! Checks whether the camera calibration has moved the points in the camera view and scene view
@@ -496,6 +562,9 @@ def check_cam_calibration(browser, not_expected_cam=(0, 0), not_expected_map=(0,
   """
   try:
     browser.find_element(By.ID,'cam_calibrate_1').click()
+    WebDriverWait(browser, 30).until(
+      EC.presence_of_element_located((By.ID, 'id_transforms'))
+    )
     cam_values_init = get_calibration_points(browser, 'camera')
     map_values_init = get_calibration_points(browser, 'map')
     if (cam_values_init[0] != not_expected_cam) and (map_values_init[0] != not_expected_map):
@@ -518,6 +587,9 @@ def check_calibration_initialization(browser, expected_cam_values, expected_map_
   calibration = True
   try:
     browser.find_element(By.ID,'cam_calibrate_1').click()
+    WebDriverWait(browser, 30).until(
+      EC.presence_of_element_located((By.ID, 'id_transforms'))
+    )
     cam_values_init = get_calibration_points(browser, 'camera')
     map_values_init = get_calibration_points(browser, 'map')
     for index in range(len(expected_cam_values)):
@@ -537,14 +609,12 @@ def get_calibration_points(browser, calibration_type, initial_transforms=True):
   """! Return initial values of calibration points for camera or map.
   @param    browser                    Object wrapping the Selenium driver.
   @param    calibration_type           String to specify 'camera' or 'map' calibration points
-  @param    initial_transforms         If True: return initial calibration transform stored in database.
-                                       If False: return temporary calibration changes before save.
+  @param    initial_transforms         Kept for backward compatibility.
   @return   list                       List of calibration points represented as four pairs of float x, y values.
   """
   try:
     browser.execute_script("document.querySelectorAll('.display-none').forEach(e => {e.style.display = 'block';})")
-    transforms_type = 'initial-id_transforms' if initial_transforms else 'id_transforms'
-    init_id_transforms = browser.find_element(By.ID, transforms_type).get_attribute('value')
+    init_id_transforms = browser.find_element(By.ID, 'id_transforms').get_attribute('value')
     init_id_list = init_id_transforms.strip().split(",")
     init_id_pairs = list(zip(map(float, init_id_list[::2]), map(float, init_id_list[1::2])))
     if calibration_type == 'camera':
@@ -1028,14 +1098,15 @@ def create_camera(browser, camera_name, camera_id, scene_name):
   print("Error while creating camera:",camera_name)
   return False
 
-def check_db_status(browser):
+def check_db_status(browser, scene_name=TEST_SCENE_NAME):
   """! The purpose of this function is to make sure database is
   up before running the tests. This function will return true if
-  it's able to navigate to the 'Demo' scene page.
+  it's able to navigate to the given scene page.
   @param    browser                    Object wrapping the Selenium driver.
+  @param    scene_name                 Name of the scene to navigate to.
   @return   bool                       Boolean representing success.
   """
-  return navigate_to_scene(browser, TEST_SCENE_NAME)
+  return navigate_to_scene(browser, scene_name)
 
 def navigate_to_scene(browser, scene_name):
   """! This function navigates to the 'Scenes' page, then waits for the Scene 'scene_name'
@@ -1334,7 +1405,7 @@ def mock_display(func):
   """
   @functools.wraps(func)
   def wrapper_mock_display(*args, **kwargs):
-    display = Display(visible=0, size=(1920, 1080))
+    display = Display(visible=0, size=(1920, 1080), color_depth=24)
     display.start()
 
     return_val = func(*args, **kwargs)
@@ -1502,6 +1573,50 @@ class InteractWithPage(ABC):
     # drop alpha channel, bgr to rbg
     img_array = img_array[:, :, 0:3]
     return img_array[:, :, ::-1]
+
+  def get_canvas_screenshot(self, canvas_id: str = "scene") -> np.ndarray:
+    """! Takes a screenshot of a specific canvas and returns it as a numpy array.
+    @param    canvas_id               ID of the canvas element.
+    @return   img_array               Canvas image as a BGR numpy array.
+    """
+    canvas = self.browser.find_element(By.ID, canvas_id)
+    png = canvas.screenshot_as_png
+    img = Image.open(BytesIO(png), formats=["PNG"])
+    arr = np.asarray(img)[:, :, :3]
+    return arr[:, :, ::-1]
+
+  def wait_for_3d_scene_rendered(self, timeout: float = 60.0,
+                                 min_unique_colors: int = 50,
+                                 poll_interval: float = 0.5,
+                                 canvas_id: str = "scene") -> bool:
+    """! Waits until a canvas shows rendered 3D content based on pixel variation.
+    @param    timeout                 Max time to wait in seconds.
+    @param    min_unique_colors       Minimum unique colours indicating render.
+    @param    poll_interval           Delay between checks in seconds.
+    @param    canvas_id               ID of the canvas element.
+    @return   success                 True if rendered before timeout, else False.
+    """
+    deadline = time.time() + timeout
+    last_unique = 0
+    last_error = None
+    while time.time() < deadline:
+      try:
+        canvas = self.browser.find_element(By.ID, canvas_id)
+        png = canvas.screenshot_as_png
+        img = Image.open(BytesIO(png), formats=["PNG"])
+        arr = np.asarray(img)[:, :, :3]
+        sample = arr[::4, ::4].reshape(-1, 3)
+        unique = np.unique(sample, axis=0).shape[0]
+        last_unique = max(last_unique, unique)
+        if unique >= min_unique_colors:
+          return True
+      except Exception as e:
+        last_error = e
+      time.sleep(poll_interval)
+    print(f"wait_for_3d_scene_rendered: timed out after {timeout}s on canvas #{canvas_id} "
+          f"(max unique colours observed: {last_unique}, required: {min_unique_colors}, "
+          f"last error: {last_error})")
+    return False
 
   def check_file_uploaded_is_on_server(self) -> bool:
     """! Check that uploaded file is on the server.
@@ -1717,3 +1832,36 @@ class InteractWithSceneUpdate(InteractWithPage):
     upload_success = self.upload_scene_file(upload_checks)
     assert upload_success
     return upload_success
+
+# Module-level flag set by the tracking callback registered in wait_for_scene_ready().
+_scene_tracking_seen = False
+
+def _tracking_received(pahoClient, userdata, message):
+  global _scene_tracking_seen
+  _scene_tracking_seen = True
+  return
+
+def wait_for_scene_ready(client, detection, publish_topic, wait_topic,
+                         timeout=30.0, interval=0.1):
+  """! Publishes detection data until tracking output is received or timeout is reached.
+  @param    client                  Connected PubSub client (loop already started).
+  @param    detection               Detection payload dict (timestamp updated each send).
+  @param    publish_topic           Topic to publish detection data on.
+  @param    wait_topic              Topic to listen for tracking readiness signal.
+  @param    timeout                 Max time to wait in seconds.
+  @param    interval                Delay between publishes in seconds.
+  @return   success                 True if tracking received, else False.
+  """
+  global _scene_tracking_seen
+  _scene_tracking_seen = False
+  client.addCallback(wait_topic, _tracking_received)
+  try:
+    deadline = time.time() + timeout
+    detection_pub = dict(detection)
+    while not _scene_tracking_seen and time.time() < deadline:
+      detection_pub['timestamp'] = get_iso_time()
+      client.publish(publish_topic, json.dumps(detection_pub))
+      time.sleep(interval)
+    return _scene_tracking_seen
+  finally:
+    client.removeCallback(wait_topic)

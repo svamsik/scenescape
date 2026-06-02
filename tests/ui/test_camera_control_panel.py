@@ -1,6 +1,4 @@
-#!/usr/bin/env python3
-
-# SPDX-FileCopyrightText: (C) 2022 - 2025 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2022 - 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -22,6 +20,8 @@ TEST_NAME = "NEX-T10475"
 WAIT_SEC = 1
 
 class Scene3dUserInterfaceTest(UserInterfaceTest):
+  BROWSER_WEBGL = True
+
   ELEM_STATS_PANEL = "panel-stats"
   ELEM_3D_CTL_PANEL = "panel-3d-controls"
   ELEM_SCENE_CTL_PANEL = "scene-controls-3d"
@@ -59,11 +59,8 @@ class Scene3dUserInterfaceTest(UserInterfaceTest):
     return status
 
   def captureScreenshot(self):
-    # Hide control panels and stats box
-    assert self.togglePanel(self.ELEM_STATS_PANEL, True)
-    assert self.togglePanel(self.ELEM_3D_CTL_PANEL, True)
-    time.sleep(WAIT_SEC)
-    cap = self.getPageScreenshot()
+    # Screenshot the WebGL canvas directly.
+    cap = self.getCanvasScreenshot("scene")
 
     # Show 3D control panel again for interaction
     assert self.togglePanel(self.ELEM_3D_CTL_PANEL, False)
@@ -80,6 +77,10 @@ class Scene3dUserInterfaceTest(UserInterfaceTest):
       log.info("Expand camera1 controls")
       # Use camera panel loaded to detect 3D components loaded on page
       self.clickOnElement("camera1-control-panel", delay=100)
+
+      # WebGL in headless Firefox needs time to paint the first 3D frame.
+      assert self.waitFor3dSceneRendered(timeout=60), \
+        "3D scene did not render visible content within timeout"
 
       log.info("Take initial 3D screenshot")
       # Screenshot is taken after camera panel is expanded due to camera control on 3D plane will be highlighted after expanding the specific camera panel
