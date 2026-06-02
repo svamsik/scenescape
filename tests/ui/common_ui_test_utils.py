@@ -1382,6 +1382,52 @@ def get_element_screenshot(element) -> np.ndarray:
   img_array = img_array[:, :, 0:3]
   return img_array[:, :, ::-1]
 
+def get_canvas_screenshot(browser, canvas_id: str = "scene") -> np.ndarray:
+  """! Takes a screenshot of a specific canvas and returns it as a numpy array.
+  @param    browser     Object wrapping the Selenium driver.
+  @param    canvas_id               ID of the canvas element.
+  @return   img_array               Canvas image as a BGR numpy array.
+  """
+  canvas = browser.find_element(By.ID, canvas_id)
+  png = canvas.screenshot_as_png
+  img = Image.open(BytesIO(png), formats=["PNG"])
+  arr = np.asarray(img)[:, :, :3]
+  return arr[:, :, ::-1]
+
+def wait_for_3d_scene_rendered(browser, timeout: float = 60.0,
+                               min_unique_colors: int = 50,
+                               poll_interval: float = 0.5,
+                               canvas_id: str = "scene") -> bool:
+  """! Waits until a canvas shows rendered 3D content based on pixel variation.
+  @param    browser                 Object wrapping the Selenium driver.
+  @param    timeout                 Max time to wait in seconds.
+  @param    min_unique_colors       Minimum unique colours indicating render.
+  @param    poll_interval           Delay between checks in seconds.
+  @param    canvas_id               ID of the canvas element.
+  @return   bool                    True if rendered before timeout.
+  """
+  deadline = time.time() + timeout
+  last_unique = 0
+  last_error = None
+  while time.time() < deadline:
+    try:
+      canvas = browser.find_element(By.ID, canvas_id)
+      png = canvas.screenshot_as_png
+      img = Image.open(BytesIO(png), formats=["PNG"])
+      arr = np.asarray(img)[:, :, :3]
+      sample = arr[::4, ::4].reshape(-1, 3)
+      unique = np.unique(sample, axis=0).shape[0]
+      last_unique = max(last_unique, unique)
+      if unique >= min_unique_colors:
+        return True
+    except Exception as e:
+      last_error = e
+    time.sleep(poll_interval)
+  print(f"wait_for_3d_scene_rendered: timed out after {timeout}s on canvas #{canvas_id} "
+        f"(max unique colours observed: {last_unique}, required: {min_unique_colors}, "
+        f"last error: {last_error})")
+  return False
+
 def is_within_rectangle(bl, tr, curr_point):
   """! Determines if a point lies within a rectangle or not.
   @param    bl          Bottom Left of the rectangle.
@@ -1575,48 +1621,14 @@ class InteractWithPage(ABC):
     return img_array[:, :, ::-1]
 
   def get_canvas_screenshot(self, canvas_id: str = "scene") -> np.ndarray:
-    """! Takes a screenshot of a specific canvas and returns it as a numpy array.
-    @param    canvas_id               ID of the canvas element.
-    @return   img_array               Canvas image as a BGR numpy array.
-    """
-    canvas = self.browser.find_element(By.ID, canvas_id)
-    png = canvas.screenshot_as_png
-    img = Image.open(BytesIO(png), formats=["PNG"])
-    arr = np.asarray(img)[:, :, :3]
-    return arr[:, :, ::-1]
+    return get_canvas_screenshot(self.browser, canvas_id)
 
   def wait_for_3d_scene_rendered(self, timeout: float = 60.0,
                                  min_unique_colors: int = 50,
                                  poll_interval: float = 0.5,
                                  canvas_id: str = "scene") -> bool:
-    """! Waits until a canvas shows rendered 3D content based on pixel variation.
-    @param    timeout                 Max time to wait in seconds.
-    @param    min_unique_colors       Minimum unique colours indicating render.
-    @param    poll_interval           Delay between checks in seconds.
-    @param    canvas_id               ID of the canvas element.
-    @return   success                 True if rendered before timeout, else False.
-    """
-    deadline = time.time() + timeout
-    last_unique = 0
-    last_error = None
-    while time.time() < deadline:
-      try:
-        canvas = self.browser.find_element(By.ID, canvas_id)
-        png = canvas.screenshot_as_png
-        img = Image.open(BytesIO(png), formats=["PNG"])
-        arr = np.asarray(img)[:, :, :3]
-        sample = arr[::4, ::4].reshape(-1, 3)
-        unique = np.unique(sample, axis=0).shape[0]
-        last_unique = max(last_unique, unique)
-        if unique >= min_unique_colors:
-          return True
-      except Exception as e:
-        last_error = e
-      time.sleep(poll_interval)
-    print(f"wait_for_3d_scene_rendered: timed out after {timeout}s on canvas #{canvas_id} "
-          f"(max unique colours observed: {last_unique}, required: {min_unique_colors}, "
-          f"last error: {last_error})")
-    return False
+    return wait_for_3d_scene_rendered(self.browser, timeout, min_unique_colors,
+                                      poll_interval, canvas_id)
 
   def check_file_uploaded_is_on_server(self) -> bool:
     """! Check that uploaded file is on the server.
