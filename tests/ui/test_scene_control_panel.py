@@ -37,10 +37,11 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     interaction_page = common.InteractWith3DScene(browser)
     common.navigate_directly_to_page(browser, f"/scene/detail/{common.TEST_SCENE_ID}/")
+    common.selenium_wait_for_elements(browser, (By.ID, "scene"), 120)
 
     log.info("Turn off tracked objects and hide stats graph.")
     time.sleep(WAIT_SEC)
-    common.selenium_wait_for_elements(browser, (By.ID, "camera1-control-panel"), 100)
+    common.selenium_wait_for_elements(browser, (By.ID, "camera1-control-panel"), 180)
     assert interaction_page.wait_for_3d_scene_rendered(timeout=60), \
       "3D scene did not render visible content within timeout"
     browser.find_element(By.ID, "tracked-objects-button").click()

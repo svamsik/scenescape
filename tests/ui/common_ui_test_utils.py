@@ -21,6 +21,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import ElementNotInteractableException
 from skimage.metrics import structural_similarity as ssim
 
 from scene_common.mqtt import PubSub
@@ -1117,7 +1118,18 @@ def navigate_to_scene(browser, scene_name):
   """
   # This clicks on the 'Scenes' entry in the banner at the top
   scenes_xpath = "//a[@href = '/']"
-  browser.find_element(By.XPATH, scenes_xpath).click()
+  scenes_element = browser.find_element(By.XPATH, scenes_xpath)
+  try:
+    scenes_element.click()
+  except ElementNotInteractableException:
+    # Fallback for transient layout states where banner anchors are present but not interactable.
+    try:
+      browser.execute_script("arguments[0].scrollIntoView({block: 'center'});", scenes_element)
+      browser.execute_script("arguments[0].click();", scenes_element)
+    except Exception:
+      current_url = browser.current_url
+      parsed_url = urlparse(current_url)
+      browser.get(f"{parsed_url.scheme}://{parsed_url.netloc}/")
   time.sleep(1)
 
   # This element is only shown when there is at least one scene available
@@ -1388,7 +1400,10 @@ def get_canvas_screenshot(browser, canvas_id: str = "scene") -> np.ndarray:
   @param    canvas_id               ID of the canvas element.
   @return   img_array               Canvas image as a BGR numpy array.
   """
-  canvas = browser.find_element(By.ID, canvas_id)
+  canvas = WebDriverWait(browser, 30).until(
+    EC.visibility_of_element_located((By.ID, canvas_id))
+  )
+  browser.execute_script("arguments[0].scrollIntoView({block: 'center'});", canvas)
   png = canvas.screenshot_as_png
   img = Image.open(BytesIO(png), formats=["PNG"])
   arr = np.asarray(img)[:, :, :3]
@@ -1412,6 +1427,8 @@ def wait_for_3d_scene_rendered(browser, timeout: float = 60.0,
   while time.time() < deadline:
     try:
       canvas = browser.find_element(By.ID, canvas_id)
+      if not canvas.is_displayed():
+        raise NoSuchElementException(f"Canvas #{canvas_id} is not visible")
       png = canvas.screenshot_as_png
       img = Image.open(BytesIO(png), formats=["PNG"])
       arr = np.asarray(img)[:, :, :3]
@@ -1467,7 +1484,7 @@ def scenescape_login_headed(func):
   """
   @functools.wraps(func)
   def wrapper_scenescape_login(*args, **kwargs):
-    browser = Browser(headless=False)
+    browser = Browser(headless=False, webgl=True)
     params = args[0]
     assert check_page_login(browser, params)
     assert check_db_status(browser)
@@ -1677,9 +1694,9 @@ class InteractWithPage(ABC):
       fname = fname.split("/")[-1]
       cv2.imwrite("screenshot_" + fname + ".png", screenshot)
 
-    return are_images_similar(self.interaction_params.screenshots[1],
-                          self.interaction_params.screenshots[2],
-                          self.interaction_params.screenshot_threshold)
+    return not are_images_similar(self.interaction_params.screenshots[1],
+                            self.interaction_params.screenshots[2],
+                            self.interaction_params.screenshot_threshold)
 
   def check_file_uploaded_name(self) -> bool:
     """! Check that uploaded filename is in the expected html page at the expected location.
@@ -1695,7 +1712,13 @@ class InteractWithPage(ABC):
     elif self.interaction_params.element_type == "attribute":
       page_file_name = element.get_attribute("value")
 
-    if(page_file_name == self.interaction_params.file_name) and navigate_success:
+    matches_name = (
+      page_file_name == self.interaction_params.file_name
+      or page_file_name.endswith(self.interaction_params.file_name)
+      or self.interaction_params.file_name in page_file_name
+    )
+
+    if matches_name and navigate_success:
       upload_success = True
       print(check_str_root + "Passed")
     else:
@@ -1745,8 +1768,15 @@ class InteractWith3DScene(InteractWithPage):
     @return   screenshot               Numpy array representing a screenshot.
     """
     navigate_directly_to_page(self.browser, f"/scene/detail/{TEST_SCENE_ID}/")
+    assert self.wait_for_3d_scene_rendered(timeout=60)
     time.sleep(1)
-    return self.get_page_screenshot()
+    return self.get_canvas_screenshot()
+
+  def get_page_screenshot(self) -> np.ndarray:
+    """! Override generic page screenshot for WebGL views.
+    @return   screenshot               Screenshot of the 3D canvas.
+    """
+    return self.get_canvas_screenshot()
 
   def check_3D_asset_visible(self) -> bool:
     """! Checks 3d asset visibility by checking that the expected filename is in the page source

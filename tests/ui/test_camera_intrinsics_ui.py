@@ -7,6 +7,8 @@ from tests.ui.browser import Browser, By
 import tests.ui.common_ui_test_utils as common
 from tests.utils.spec import FuncTestSpec
 from tests.utils.profiles import FULL_STACK
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 SCENESCAPE_SPEC = FuncTestSpec(
   profile=FULL_STACK,
@@ -38,7 +40,15 @@ def enter_and_validate_parameters(browser, button_id, initial_value, step):
     value += step
 
   print('Saving changes...')
-  browser.find_element(By.ID, button_id).click()
+  save_button = WebDriverWait(browser, 20).until(
+    EC.presence_of_element_located((By.ID, button_id))
+  )
+  browser.execute_script("arguments[0].scrollIntoView({block: 'center'});", save_button)
+  WebDriverWait(browser, 20).until(EC.element_to_be_clickable((By.ID, button_id)))
+  try:
+    save_button.click()
+  except Exception:
+    browser.execute_script("arguments[0].click();", save_button)
 
   assert common.wait_for_elements(browser, camera1_element_id)
   browser.find_element(By.XPATH, camera1_element_id ).click()

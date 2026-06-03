@@ -57,7 +57,8 @@ class UserInterfaceTest(Diagnostic):
     return common.check_page_login(self.browser, log_params)
 
   def checkDbStatus(self):
-    return common.check_db_status(self.browser)
+    scene_name = self.params.get('scene', common.TEST_SCENE_NAME)
+    return common.check_db_status(self.browser, scene_name)
 
   def clickOnElement(self, elementId: str, waitTime: int = 1, delay: int = 0) -> None:
     """! Toggles the specified slider in the 3D UI control panel

@@ -83,7 +83,10 @@ def test_manual_camera_calibration(params, record_xml_attribute):
     camera_view_before = browser.find_element(By.ID, 'camera_img_canvas')
     map_view_before = browser.find_element(By.ID, 'map_canvas_3D')
     cam_pic_before = common.get_element_screenshot(camera_view_before)
-    map_pic_before = common.get_element_screenshot(map_view_before)
+    assert common.wait_for_3d_scene_rendered(browser, timeout=60, canvas_id='map_canvas_3D',
+                                             min_unique_colors=20), \
+      "Map canvas did not render before baseline screenshot"
+    map_pic_before = common.get_canvas_screenshot(browser, 'map_canvas_3D')
     log.info("Screenshot taken before manual calibration")
     common.navigate_directly_to_page(browser, f"/{common.TEST_SCENE_ID}/")
 
@@ -101,7 +104,10 @@ def test_manual_camera_calibration(params, record_xml_attribute):
     camera_view_after = browser.find_element(By.ID, 'camera_img_canvas')
     map_view_after = browser.find_element(By.ID, 'map_canvas_3D')
     cam_pic_after = common.get_element_screenshot(camera_view_after)
-    map_pic_after = common.get_element_screenshot(map_view_after)
+    assert common.wait_for_3d_scene_rendered(browser, timeout=60, canvas_id='map_canvas_3D',
+                                             min_unique_colors=20), \
+      "Map canvas did not render after calibration save"
+    map_pic_after = common.get_canvas_screenshot(browser, 'map_canvas_3D')
     log.info("Screenshot taken after saving manual calibration")
     common.navigate_directly_to_page(browser, f"/{common.TEST_SCENE_ID}/")
 
@@ -119,7 +125,10 @@ def test_manual_camera_calibration(params, record_xml_attribute):
     camera_view_after = browser.find_element(By.ID, 'camera_img_canvas')
     map_view_after = browser.find_element(By.ID, 'map_canvas_3D')
     cam_pic_after_revert = common.get_element_screenshot(camera_view_after)
-    map_pic_after_revert = common.get_element_screenshot(map_view_after)
+    assert common.wait_for_3d_scene_rendered(browser, timeout=60, canvas_id='map_canvas_3D',
+                                             min_unique_colors=20), \
+      "Map canvas did not render after calibration revert"
+    map_pic_after_revert = common.get_canvas_screenshot(browser, 'map_canvas_3D')
     log.info("Screenshot taken after reverting to the previous calibration setting")
 
     log.info("Validating of difference in screenshots after calibration")

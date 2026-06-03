@@ -135,11 +135,25 @@ class GeospatialIngestPublish(FunctionalTest):
   def verifyTRSMatrix(self):
     res = self.rest.updateScene(self.sceneUID, {'output_lla': True})
     assert res, (res.statusCode, res.errors)
-    time.sleep(MAX_WAIT_TIMEOUT)
-    res = self.rest.getScene(self.sceneUID)
-    assert 'trs_matrix' in res and res['trs_matrix']
+    deadline = time.time() + MAX_WAIT_TIMEOUT
+    res = None
+    while time.time() < deadline:
+      res = self.rest.getScene(self.sceneUID)
+      if 'trs_matrix' in res and res['trs_matrix']:
+        break
+      time.sleep(1)
+    assert res is not None and 'trs_matrix' in res and res['trs_matrix']
+
     res = self.rest.updateScene(self.sceneUID, {'output_lla': False})
-    assert 'trs_matrix' not in res
+    assert res, (res.statusCode, res.errors)
+    deadline = time.time() + MAX_WAIT_TIMEOUT
+    scene = None
+    while time.time() < deadline:
+      scene = self.rest.getScene(self.sceneUID)
+      if 'trs_matrix' not in scene:
+        break
+      time.sleep(1)
+    assert scene is not None and 'trs_matrix' not in scene
     return
 
   def verifyIngest(self):

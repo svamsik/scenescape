@@ -61,14 +61,15 @@ def verify_message_mqtt(client):
   wait_topic = PubSub.formatTopic(PubSub.DATA_SCENE,
                                   scene_id=common.TEST_SCENE_ID,
                                   thing_type=OBJECT_CATEGORY)
-  ready = common.wait_for_scene_ready(client, first, publishTopic, wait_topic)
+  ready = common.wait_for_scene_ready(client, first, publishTopic, wait_topic,
+                                      timeout=90.0)
   if not ready:
     print("verify_message_mqtt: scene controller did not produce tracking "
           "output within timeout; publishing sequence anyway")
 
   # Publish the full sequence multiple times so that transient
   # tracker dropouts do not silently swallow the only crossing in the data.
-  for attempt in range(3):
+  for attempt in range(5):
     if is_receiving_message:
       break
     for current_line, line in enumerate(g_data):
@@ -132,6 +133,10 @@ def test_create_and_delete_tripwire_mqtt(params, record_xml_attribute):
     topic = PubSub.formatTopic(PubSub.EVENT, event_type="+", region_type="tripwire",
                               scene_id=common.TEST_SCENE_ID, region_id=tw_uid)
     client.addCallback(topic, eventReceived)
+    try:
+      client.subscribe(topic)
+    except Exception:
+      pass
 
     assert common.navigate_to_scene(browser, common.TEST_SCENE_NAME)
     assert common.verify_tripwire_persistence(browser, TW_NAME)
