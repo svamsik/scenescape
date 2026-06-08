@@ -180,12 +180,15 @@ class GeospatialIngestPublish(FunctionalTest):
     assert self.outputReceived is not True
 
     log.info("\nChecking scene can accept lat_long_alt data")
-    for v in [i * 0.5 for i in range(0, 20)]:
+    start_time = time.time()
+    v = 0.0
+    while self.outputReceived is False:
       detection = self.formatDetection(get_iso_time(), [v, v, v], lla=LLA_VALUE)
       self.pubsub.publish(topic, json.dumps(detection))
       time.sleep(1 / FRAMES_PER_SECOND)
-      if self.outputReceived is True:
+      if time.time() - start_time > MAX_WAIT_TIMEOUT:
         break
+      v += 0.5
     assert self.outputReceived is True
     return
 
