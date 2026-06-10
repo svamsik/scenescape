@@ -40,17 +40,14 @@ Each build produces a container image with a single model. The API and runtime a
   cd scenescape
   ```
 
-- **Build mapping (default: mapanything)**:
+- **Build mapping**:
+
+  ```bash
+  export MODEL_TYPE=mapanything # or MODEL_TYPE=vggt
+  ```
 
   ```bash
   make mapping
-  #or
-  MODEL_TYPE=mapanything make mapping
-  ```
-
-- **Build mapping (vggt)**:
-  ```bash
-  MODEL_TYPE=vggt make mapping
   ```
 
 ### How It Works
@@ -78,7 +75,7 @@ docker run -d \
     -v vol-mapping-model-weights:/workspace/model_weights \
     -v vol-mapping-torch-cache:/workspace/.cache/torch \
     -v vol-mapping-hf-cache:/workspace/.cache/huggingface \
-    scenescape-mapping
+    scenescape-mapping-${MODEL_TYPE:-mapanything}
 ```
 
 This command sets up the container with the correct user, network, hostname, ports, and persistent volumes for model weights and caches.
@@ -111,7 +108,7 @@ The response will include which model was used:
 ### Health Check
 
 ```bash
-curl https://localhost:8444/health
+curl https://localhost:8444/v1/health
 ```
 
 Response includes model information:
@@ -128,7 +125,7 @@ Response includes model information:
 ### Model Information
 
 ```bash
-curl https://localhost:8444/models
+curl https://localhost:8444/v1/models
 ```
 
 Response shows single model details:

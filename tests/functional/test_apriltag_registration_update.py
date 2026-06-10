@@ -17,12 +17,13 @@ SCENESCAPE_SPEC = FuncTestSpec(
   auth=AUTH_CONTROLLER,
 )
 
-POLL_INTERVAL = 5
-POLL_TIMEOUT = 300
+POLL_INTERVAL_S = 5
+POLL_TIMEOUT_S = 300
 REST_RETRY_COUNT = 3
 REST_RETRY_INTERVAL = 2
 REGISTRATION_RETRY_INTERVAL = 90
 BASE_URL = "https://autocalibration.scenescape.intel.com:8443"
+
 MAP_APRILTAG_COUNT = 7  # number of apriltags present in Queuing scene
 
 
@@ -34,13 +35,14 @@ class ApriltagRegistration(FunctionalTest):
     super().__init__(testName, request, recordXMLAttribute)
     self.scene_id = '302cf49a-97ec-402d-a324-c5077b280b7b'
     self.original_apriltag_size = None
+    self.autocalib_base = f"{self.params['weburl']}/api/v1/autocalibration"
 
     self.rootcert = self.params['rootcert']
     self.rest = RESTClient(self.params['resturl'], rootcert=self.params['rootcert'])
     res = self.rest.authenticate(self.params['user'], self.params['password'])
     assert res, res.errors
 
-    r = requests.get(f"{BASE_URL}/v1/status", verify=self.rootcert, timeout=10)
+    r = requests.get(f"{self.autocalib_base}/status", verify=self.rootcert, timeout=10)
     assert r.ok, f"Autocalibration status check failed: {r.status_code} {r.text}"
     status = r.json()
     assert status.get('status') == 'running', \
@@ -88,7 +90,7 @@ class ApriltagRegistration(FunctionalTest):
   def _trigger_registration(self):
     """Explicitly POST to the autocalibration service to start scene registration"""
 
-    url = f"{BASE_URL}/v1/scenes/{self.scene_id}/registration"
+    url = f"{self.autocalib_base}/scenes/{self.scene_id}/registration"
     last_error = None
     for attempt in range(REST_RETRY_COUNT):
       try:
@@ -107,7 +109,7 @@ class ApriltagRegistration(FunctionalTest):
 
     start = time.time()
     last_retrigger = start
-    while time.time() - start < POLL_TIMEOUT:
+    while time.time() - start < POLL_TIMEOUT_S:
       try:
         if self._get_scene().get('map_processed') is not None:
           return
@@ -118,19 +120,20 @@ class ApriltagRegistration(FunctionalTest):
         self._trigger_registration()
         last_retrigger = time.time()
 
-      time.sleep(POLL_INTERVAL)
-    raise AssertionError(f"Registration did not complete within {POLL_TIMEOUT}s")
+      time.sleep(POLL_INTERVAL_S)
+    raise AssertionError(f"Registration did not complete within {POLL_TIMEOUT_S}s")
 
   def _clear_calibration_markers(self):
     """Delete all calibration markers for the test scene"""
 
     response = self.rest.getCalibrationMarkers({'scene': self.scene_id})
-    if response and 'results' in response:
-      for marker in response['results']:
-        r = self.rest.deleteCalibrationMarker(marker['marker_id'])
-        assert r, (r.statusCode, r.errors)
-        assert self.rest.getCalibrationMarker(marker['marker_id']).statusCode == 404, \
-          f"Failed to delete marker {marker['marker_id']}"
+    assert response, (response.statusCode, response.errors)
+    assert 'results' in response, f"Invalid calibration marker response: {response}"
+    for marker in response['results']:
+      r = self.rest.deleteCalibrationMarker(marker['marker_id'])
+      assert r, (r.statusCode, r.errors)
+      assert self.rest.getCalibrationMarker(marker['marker_id']).statusCode == 404, \
+        f"Failed to delete marker {marker['marker_id']}"
 
   def _restore_scene(self):
     """Restore original apriltag_size after the test"""
