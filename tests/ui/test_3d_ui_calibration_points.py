@@ -24,48 +24,8 @@ TEST_NAME = "NEX-T10473"
 WAIT_SEC = 3
 
 class WillOurShipGo(UserInterfaceTest):
-  BROWSER_WEBGL = True
-
   def __init__(self, testName, request, recordXMLAttribute):
     super().__init__(testName, request, recordXMLAttribute)
-
-  def waitForDbStatus(self, attempts: int = 3, delay_sec: int = 5) -> bool:
-    scene_id = self.params.get('scene_id', common.TEST_SCENE_ID)
-    for _ in range(attempts):
-      if self.checkDbStatus():
-        return True
-
-      try:
-        self.navigateDirectlyToPage(f"/scene/detail/{scene_id}/")
-        if self._wait_for_camera_control_panel(timeout_sec=45):
-          return True
-      except Exception:
-        pass
-
-      time.sleep(delay_sec)
-    return False
-
-  def _wait_for_camera_control_panel(self, timeout_sec: int = 45) -> bool:
-    end_time = time.time() + timeout_sec
-    while time.time() < end_time:
-      try:
-        if "/scene/detail/" not in self.browser.current_url:
-          return False
-
-        # Camera panels are created dynamically and may not always use "camera1".
-        panels = self.browser.find_elements(self.By.CSS_SELECTOR, "[id$='-control-panel']")
-        for panel in panels:
-          panel_id = panel.get_attribute("id") or ""
-          if panel_id.startswith("camera") and panel.is_displayed():
-            return True
-
-        self.browser.refresh()
-      except Exception:
-        pass
-
-      time.sleep(1)
-
-    return False
 
   def setUpCalibrationTest(self):
     """! Sets up the scene for testing the 3D UI calibration by navigating to the page,
@@ -191,7 +151,7 @@ class WillOurShipGo(UserInterfaceTest):
 
     try:
       assert self.login()
-      assert self.waitForDbStatus()
+      assert self.checkDbStatus()
 
       self.setUpCalibrationTest()
 

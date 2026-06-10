@@ -8,10 +8,10 @@ import tests.common_test_utils as tests_common
 import tests.ui.common_ui_test_utils as common
 from tests.ui.browser import By, Browser
 from tests.utils.spec import FuncTestSpec
-from tests.utils.profiles import FULL_STACK_WITH_RETAIL_VIDEO
+from tests.utils.profiles import FULL_STACK_WITH_VIDEO_AND_RETAIL
 
 SCENESCAPE_SPEC = FuncTestSpec(
-  profile=FULL_STACK_WITH_RETAIL_VIDEO,
+  profile=FULL_STACK_WITH_VIDEO_AND_RETAIL,
   require_password=True, auth="",
 )
 
@@ -45,7 +45,6 @@ def test_live_button(params, record_xml_attribute=None):
       os.remove(os.path.join(WORKSPACE, files))
 
   exit_code = 1
-  browser = None
   try:
     print("Executing: " + TEST_NAME)
     print("Test that the 'Live View' button in a scene works.")
@@ -92,8 +91,7 @@ def test_live_button(params, record_xml_attribute=None):
     os.remove( img3_path )
 
   finally:
-    if browser is not None:
-      browser.close()
+    browser.close()
     tests_common.record_test_result(TEST_NAME, exit_code)
 
   assert exit_code == 0

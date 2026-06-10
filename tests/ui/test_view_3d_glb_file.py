@@ -6,7 +6,6 @@
 import tests.ui.common_ui_test_utils as common
 import os
 import cv2
-import time
 from tests.utils.spec import FuncTestSpec
 from tests.utils.profiles import FULL_STACK
 
@@ -70,12 +69,7 @@ def file_visibility_test(params, file_name, base_screenshot, DEBUG):
 
   object_visible_success = False
   if upload_success:
-    for _ in range(3):
-      object_visible_success = check_3D_scene_asset_in_3D_scene(
-        params, base_screenshot, file_name, file_path, DEBUG)
-      if object_visible_success:
-        break
-      time.sleep(3)
+    object_visible_success = check_3D_scene_asset_in_3D_scene(params, base_screenshot, file_name, file_path, DEBUG)
 
   return upload_success, object_visible_success
 

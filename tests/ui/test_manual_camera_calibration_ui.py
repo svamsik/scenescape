@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
+# SPDX-FileCopyrightText: (C) 2023 - 2025 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
 from tests.utils.log import get_logger
@@ -39,9 +39,7 @@ def test_manual_camera_calibration(params, record_xml_attribute):
   try:
     log.info("Executing: " + TEST_NAME)
     log.info("Test that camera pose can be be set manually")
-    # The 3D map viewport uses THREE.WebGLRenderer, which requires WebGL
-    # to be enabled in headless Firefox.
-    browser = Browser(webgl=True)
+    browser = Browser()
     assert common.check_page_login(browser, params)
     assert common.check_db_status(browser)
 
@@ -83,10 +81,7 @@ def test_manual_camera_calibration(params, record_xml_attribute):
     camera_view_before = browser.find_element(By.ID, 'camera_img_canvas')
     map_view_before = browser.find_element(By.ID, 'map_canvas_3D')
     cam_pic_before = common.get_element_screenshot(camera_view_before)
-    assert common.wait_for_3d_scene_rendered(browser, timeout=60, canvas_id='map_canvas_3D',
-                                             min_unique_colors=20), \
-      "Map canvas did not render before baseline screenshot"
-    map_pic_before = common.get_canvas_screenshot(browser, 'map_canvas_3D')
+    map_pic_before = common.get_element_screenshot(map_view_before)
     log.info("Screenshot taken before manual calibration")
     common.navigate_directly_to_page(browser, f"/{common.TEST_SCENE_ID}/")
 
@@ -104,10 +99,7 @@ def test_manual_camera_calibration(params, record_xml_attribute):
     camera_view_after = browser.find_element(By.ID, 'camera_img_canvas')
     map_view_after = browser.find_element(By.ID, 'map_canvas_3D')
     cam_pic_after = common.get_element_screenshot(camera_view_after)
-    assert common.wait_for_3d_scene_rendered(browser, timeout=60, canvas_id='map_canvas_3D',
-                                             min_unique_colors=20), \
-      "Map canvas did not render after calibration save"
-    map_pic_after = common.get_canvas_screenshot(browser, 'map_canvas_3D')
+    map_pic_after = common.get_element_screenshot(map_view_after)
     log.info("Screenshot taken after saving manual calibration")
     common.navigate_directly_to_page(browser, f"/{common.TEST_SCENE_ID}/")
 
@@ -125,10 +117,7 @@ def test_manual_camera_calibration(params, record_xml_attribute):
     camera_view_after = browser.find_element(By.ID, 'camera_img_canvas')
     map_view_after = browser.find_element(By.ID, 'map_canvas_3D')
     cam_pic_after_revert = common.get_element_screenshot(camera_view_after)
-    assert common.wait_for_3d_scene_rendered(browser, timeout=60, canvas_id='map_canvas_3D',
-                                             min_unique_colors=20), \
-      "Map canvas did not render after calibration revert"
-    map_pic_after_revert = common.get_canvas_screenshot(browser, 'map_canvas_3D')
+    map_pic_after_revert = common.get_element_screenshot(map_view_after)
     log.info("Screenshot taken after reverting to the previous calibration setting")
 
     log.info("Validating of difference in screenshots after calibration")
