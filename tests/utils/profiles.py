@@ -126,6 +126,26 @@ FULL_STACK_WITH_VIDEO_AND_RETAIL = ServiceProfile(
   },
 )
 
+FULL_STACK_WITH_RETAIL_VIDEO = ServiceProfile(
+  name="full_stack_with_retail_video",
+  compose_files=(
+    f"{DLS}/broker.yml",
+    f"{COMPOSE}/ntp.yml",
+    f"{COMPOSE}/pgserver.yml",
+    f"{DLS}/retail_video.yml",
+    f"{COMPOSE}/scene.yml",
+    f"{COMPOSE}/web.yml",
+    f"{COMPOSE}/cams.yml",
+  ),
+  wait_for={
+    "pgserver": _PGSERVER,
+    "web": _WEB,
+    "retail-video": WaitConfig(),
+    "scene": _SCENE,
+    "broker": _BROKER,
+  },
+)
+
 REID = ServiceProfile(
   name="reid",
   compose_files=(

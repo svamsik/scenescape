@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (C) 2023 - 2025 Intel Corporation
+// SPDX-FileCopyrightText: (C) 2023 - 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 "use strict";
@@ -170,7 +170,10 @@ function initializeCalibrationSettings() {
     );
 
     const transformType = $("#id_transform_type").val();
-    const initialTransforms = $("#initial-id_transforms").val().split(",");
+    const initialTransformsValue = $("#id_transforms").val() || "";
+    const initialTransforms = initialTransformsValue
+      ? initialTransformsValue.split(",")
+      : [];
     camera_calibration.addInitialCalibrationPoints(
       initialTransforms,
       transformType,

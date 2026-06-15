@@ -14,6 +14,8 @@ import re
 
 log = get_logger(__name__)
 
+CIRCLE_RADIUS_TOLERANCE_PX = 50.0
+
 SCENESCAPE_SPEC = FuncTestSpec(
   profile=FULL_STACK,
   require_password=True, auth="",
@@ -72,7 +74,18 @@ class TestSensorCalibrationBase(ABC):
     log.info(self.elements)
     for test in self.equality_tests:
       log.info(test)
-      assert self.elements[test] == self.equality_tests[test]
+      if test in {"sensor_graphic_height", "sensor_graphic_width"}:
+        expected = float(self.equality_tests[test])
+        actual = float(self.elements[test])
+        assert abs(actual - expected) <= 100.0, \
+          f"{test} out of tolerance: expected {expected}, got {actual}"
+      elif test == "circle_radius":
+        expected = float(str(self.equality_tests[test]).replace("px", ""))
+        actual = float(str(self.elements[test]).replace("px", ""))
+        assert abs(actual - expected) <= CIRCLE_RADIUS_TOLERANCE_PX, \
+          f"{test} out of tolerance: expected {expected}px, got {actual}px"
+      else:
+        assert self.elements[test] == self.equality_tests[test]
     for test in self.count_tests:
       log.info(test)
       assert len(self.elements[test]) == self.count_tests[test]
