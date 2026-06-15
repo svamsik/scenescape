@@ -1,0 +1,126 @@
+---
+# SPDX-FileCopyrightText: (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+name: "[Tests] Selected Tests"
+run-name: "[Tests] Selected Tests"
+
+on:
+  workflow_dispatch:
+    inputs:
+      cleanup:
+        description: "Cleanup before running selected tests"
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      ref:
+        description: "SceneScape ref to test against"
+        required: false
+        default: ""
+        type: string
+      save_artifacts:
+        description: "Save artifacts from tests"
+        required: false
+        default: true
+        type: boolean
+      cleanup:
+        description: "Cleanup before running selected tests"
+        required: false
+        default: false
+        type: boolean
+
+# Only run at most 1 workflow concurrently per pushed commit
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha || github.ref }}-${{ inputs.ref || 'default' }}
+  cancel-in-progress: true
+
+env:
+  DOCKER_BUILDKIT: 1
+  SUPASS: demo
+  # ---------------------------------------------------------------------------
+  # Edit this list to add or remove tests from the Selected Tests run.
+  # Provide one pytest target (file path, optionally with ::test_name) per line.
+  # ---------------------------------------------------------------------------
+  SELECTED_TESTS: |
+    tests/ui/test_view_3d_glb_file.py
+    tests/ui/test_upload_3d_glb_file_ui.py
+    tests/ui/test_sensor_location_ui.py
+    tests/ui/test_sensor_area.py
+    tests/ui/test_scene_control_panel.py
+    tests/ui/test_manual_camera_calibration_ui.py
+    tests/ui/test_delete_tripwire_mqtt.py
+    tests/ui/test_camera_intrinsics_ui.py
+    tests/ui/test_camera_control_panel.py
+    tests/ui/test_calibrate_all_sensor_types_ui.py
+    tests/functional/test_apriltag_registration_update.py
+    tests/functional/test_vdms_similarity_search.py
+    tests/functional/test_reid_unique_count.py
+    tests/functional/test_camera_bound_visibility_unregulated.py
+    tests/functional/test_rest_test.py
+    tests/functional/test_geospatial_ingest_publish.py
+
+permissions:
+  contents: read
+
+jobs:
+  run_selected_tests:
+    runs-on: [all]
+    name: "Selected Tests"
+    permissions:
+      packages: write # For using GHCR as cache registry
+    timeout-minutes: 300
+    steps:
+      - name: Remove test_data folder
+        run: |
+          sudo rm -rf test_data || true
+
+      - name: Checkout Repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+
+      - name: "Remove all Docker images"
+        if: ${{ github.event.inputs.cleanup == 'true' || inputs.cleanup == true }}
+        uses: ./.github/actions/cleanup
+        with:
+          system-prune: "true"
+
+      - name: Setup Tests Environment
+        id: setup-test-env
+        uses: ./.github/actions/setup-tests
+        with:
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Selected Tests
+        run: |
+          source tests/.venv/bin/activate
+          mkdir -p reports
+          # Collect non-empty, non-comment lines from SELECTED_TESTS into an array
+          mapfile -t targets < <(printf '%s\n' "${SELECTED_TESTS}" \
+            | sed 's/#.*$//' \
+            | awk 'NF')
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No tests selected in SELECTED_TESTS." >&2
+            exit 1
+          fi
+          echo "Running selected tests:"
+          printf '  %s\n' "${targets[@]}"
+          pytest "${targets[@]}" \
+            --junitxml=reports/selected_results.xml --log-level=ERROR
+
+      - name: Upload Test Report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: selected-report
+          path: |
+            **/reports/*.xml
+
+      - name: Cleanup
+        if: always()
+        uses: ./.github/actions/cleanup
