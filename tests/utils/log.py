@@ -176,3 +176,13 @@ def silence_console() -> None:
   """
   if _console_handler is not None:
     _console_handler.setLevel(logging.CRITICAL + 1)
+
+
+def current_log_dir() -> Path | None:
+  """Return the per-test log directory for the current test, if configured.
+
+  setup() stores the directory on the root 'test' logger. Returns None when
+  logging has not been configured so callers can degrade gracefully.
+  """
+  root_log = logging.getLogger(_ROOT)
+  return getattr(root_log, "_log_dir", None)

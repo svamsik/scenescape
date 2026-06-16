@@ -24,6 +24,7 @@ def test_scene_control_panel(params, record_xml_attribute):
   TEST_NAME = "NEX-T10474"
   record_xml_attribute("name", TEST_NAME)
   exit_code = 1
+  browser = None
 
   WAIT_SEC = 1
 
@@ -31,7 +32,7 @@ def test_scene_control_panel(params, record_xml_attribute):
     log.info("Executing: " + TEST_NAME)
     log.info("Test for scene control panel in 3D UI")
 
-    browser = Browser()
+    browser = Browser(webgl=True)
     assert common.check_page_login(browser, params)
     assert common.check_db_status(browser)
 
@@ -212,8 +213,14 @@ def test_scene_control_panel(params, record_xml_attribute):
 
     exit_code = 0
 
+  except Exception:
+    if browser is not None:
+      common.capture_failure_diagnostics(browser, context=TEST_NAME)
+    raise
+
   finally:
-    browser.close()
+    if browser is not None:
+      browser.close()
     common.record_test_result(TEST_NAME, exit_code)
 
   assert exit_code == 0

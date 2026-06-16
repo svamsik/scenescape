@@ -14,6 +14,7 @@ import numpy as np
 
 from PIL import Image
 from io import BytesIO
+from pathlib import Path
 from typing import Dict
 from urllib.parse import urlparse
 from pyvirtualdisplay import Display
@@ -21,13 +22,16 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import ElementNotInteractableException
+from selenium.common.exceptions import ElementNotInteractableException, TimeoutException
 from skimage.metrics import structural_similarity as ssim
 
 from scene_common.mqtt import PubSub
 from scene_common.timestamp import get_iso_time
 from tests.common_test_utils import record_test_result
 from tests.ui.browser import Browser, By, NoSuchElementException
+from tests.utils.log import get_logger, current_log_dir
+
+log = get_logger(__name__)
 
 # FIXME - APP_PROPER_NAME is not the right way to validate correct page load
 APP_PROPER_NAME = 'Intel® SceneScape'
@@ -1178,6 +1182,67 @@ def wait_for_elements(browser, search_phrase, text=None, findBy=By.XPATH, maxWai
   print( "Failed finding element with [{}]:'{}'".format(findBy, search_phrase))
   return False
 
+def capture_failure_diagnostics(browser, context=""):
+  """! Log diagnostic information about the current browser/page state.
+
+  Intended to be called when a UI test fail so that CI artifacts contain actionable context
+  instead of an empty stack trace. Captures the URL, title, WebGL availability (3D views
+  require it), the IDs of any rendered control-panel elements, and saves a
+  screenshot to the per-test log directory when available. Every step is
+  defended so diagnostics never mask the original failure.
+
+  @param    browser                  Object wrapping the Selenium driver.
+  @param    context                  Short label describing where the failure
+                                     occurred (used in log lines and the
+                                     screenshot filename).
+  @return   None
+  """
+  suffix = f" ({context})" if context else ""
+  log.error("Capturing UI failure diagnostics%s", suffix)
+
+  try:
+    log.error("Current URL: %s", browser.current_url)
+  except Exception as e:
+    log.error("Could not read current URL: %s", e)
+
+  try:
+    log.error("Page title: %s", browser.title)
+  except Exception as e:
+    log.error("Could not read page title: %s", e)
+
+  try:
+    webgl_available = browser.execute_script(
+      "try { const c = document.createElement('canvas');"
+      " return !!(c.getContext('webgl') || c.getContext('experimental-webgl')); }"
+      " catch (e) { return false; }"
+    )
+    log.error("WebGL available in browser: %s", webgl_available)
+  except Exception as e:
+    log.error("Could not query WebGL availability: %s", e)
+
+  try:
+    panel_ids = browser.execute_script(
+      "return Array.from(document.querySelectorAll('[id$=\"-control-panel\"]'))"
+      ".map(el => el.id);"
+    )
+    log.error("Control panel element IDs present: %s", panel_ids)
+  except Exception as e:
+    log.error("Could not enumerate control panel elements: %s", e)
+
+  try:
+    log_dir = current_log_dir()
+    if log_dir is not None:
+      label = "".join(c if c.isalnum() or c in "-_" else "_" for c in context) or "failure"
+      shot_path = Path(log_dir) / f"diagnostic_{label}.png"
+      browser.get_screenshot_as_file(str(shot_path))
+      log.error("Saved diagnostic screenshot: %s", shot_path)
+    else:
+      log.error("No per-test log directory configured; skipping screenshot.")
+  except Exception as e:
+    log.error("Could not save diagnostic screenshot: %s", e)
+
+  return
+
 def selenium_wait_for_elements(browser, search_phrase, timeout=20):
   """
   This function waits for elements to be available in the browser by using expected_conditions
@@ -1187,7 +1252,21 @@ def selenium_wait_for_elements(browser, search_phrase, timeout=20):
   @params     timeout                  How much time to wait for
   @returns    bool                     Boolean which is true if element loaded before timeout.
   """
-  return WebDriverWait(browser, timeout).until(EC.visibility_of_element_located(search_phrase))
+  message = (
+    f"Timed out after {timeout}s waiting for element to become visible: {search_phrase}"
+  )
+  try:
+    return WebDriverWait(browser, timeout).until(
+      EC.visibility_of_element_located(search_phrase), message=message
+    )
+  except TimeoutException:
+    log.error(
+      "selenium_wait_for_elements timed out waiting for %s after %ss",
+      search_phrase, timeout,
+    )
+    locator_value = search_phrase[1] if len(search_phrase) > 1 else "element"
+    capture_failure_diagnostics(browser, context=f"wait_for_{locator_value}")
+    raise
 
 def create_orphan_camera(browser, camera_name, camera_id):
   """! Creates camera in a scene then deletes the scene.
