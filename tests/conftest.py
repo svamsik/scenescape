@@ -176,86 +176,174 @@ class ScenescapeEnv:
   secrets_dir: str
   supass: str
 
-  def restore_db(self):
-    """Reload the database from the original test archive.
 
-    Flushes all data (keeping the schema), reloads fixture data from
-    the EXAMPLEDB archive, recreates auth users, marks the database
-    as ready, and restarts the scene controller so it picks up the
-    fresh DB state.
-    """
-    logger.info("Restoring database from EXAMPLEDB archive...")
-    manage = "$SCENESCAPE_HOME/manage.py"
-    self.docker.compose.execute(
-      "web",
-      ["sh", "-c", f"python {manage} flush --no-input"],
-      tty=False,
-    )
-    self.docker.compose.execute(
-      "web",
-      ["sh", "-c",
-       "tar xjf $EXAMPLEDB -C /tmp"
-       f" && python {manage} loaddata /tmp/data.json"
-       " && rm -f /tmp/data.json /tmp/meta.json"],
-      tty=False,
-    )
-    self.docker.compose.execute(
-      "web",
-      ["sh", "-c",
-       "find -L /run/secrets -name '*.auth'"
-       f"  -exec python {manage} createuser --skip-existing {{}} \\;"
-       " && DJANGO_SUPERUSER_PASSWORD=$SUPASS"
-       f"    python {manage} createsuperuser"
-       "    --no-input --username=admin"
-       "    --email=admin@domain.com 2>/dev/null || true"],
-      tty=False,
-    )
+# ---------------------------------------------------------------------------
+# Per-test database state management
+# ---------------------------------------------------------------------------
+#
+# The baseline database is loaded exactly once when the web container starts.
+# Each test takes a lightweight REST snapshot of the existing entities before
+# it runs, and restores the database to that exact state on teardown.
 
-    self.docker.compose.execute(
-      "web",
-      ["sh", "-c", f"python {manage} updatedbstatus --ready"],
-      tty=False,
-    )
-    logger.info("Database restored.")
 
-    logger.info("Restarting scene controller to refresh cache...")
+def _strip_uid(item):
+  """Return a copy of an entity dict suitable for re-creation."""
+  return {k: v for k, v in item.items() if k != "uid"}
+
+
+def _sensor_payload(item):
+  payload = _strip_uid(item)
+  payload.setdefault("sensor_id", item.get("uid"))
+  return payload
+
+
+def _camera_payload(item):
+  # A camera's "uid" is its sensor_id. Every other field
+  # returned by GET is accepted as-is by the create endpoint,
+  # so the camera is recreated faithfully.
+  payload = _strip_uid(item)
+  payload["sensor_id"] = item.get("uid")
+  return payload
+
+
+# Entity types managed by the per-test cleanup, ordered so that dependent
+# entities are removed before the scenes that own them. Each entry is
+# (name, list_fn, delete_fn, create_fn, payload_fn); create_fn/payload_fn are
+# None for types that cannot be recreated automatically (scenes keep a fixed
+# UID that the REST API will not accept; assets carry binary payloads).
+_CLEANUP_ENTITIES = [
+  ("regions",   lambda r: r.getRegions(None),    lambda r, uid: r.deleteRegion(uid),
+   lambda r, d: r.createRegion(d),   _strip_uid),
+  ("tripwires", lambda r: r.getTripwires(None),  lambda r, uid: r.deleteTripwire(uid),
+   lambda r, d: r.createTripwire(d), _strip_uid),
+  ("sensors",   lambda r: r.getSensors(None),    lambda r, uid: r.deleteSensor(uid),
+   lambda r, d: r.createSensor(d),   _sensor_payload),
+  ("cameras",   lambda r: r.getCameras(None),    lambda r, uid: r.deleteCamera(uid),
+   lambda r, d: r.createCamera(d),   _camera_payload),
+  ("child",     lambda r: r.getChildScene(None), lambda r, uid: r.deleteChildSceneLink(uid),
+   None, None),
+  ("assets",    lambda r: r.getAssets(None),     lambda r, uid: r.deleteAsset(uid),
+   None, None),
+  ("scenes",    lambda r: r.getScenes(None),     lambda r, uid: r.deleteScene(uid),
+   None, None),
+]
+
+# Mutable scalar fields restored on pre-existing scenes during cleanup.
+_SCENE_RESTORE_FIELDS = [
+  "name", "output_lla", "regulated_rate", "scale", "external_update_rate",
+]
+
+
+def _make_db_rest_client(config):
+  """Build an authenticated RESTClient from injected config options.
+
+  Returns None if credentials are unavailable or authentication fails, in
+  which case the per-test cleanup is skipped (with a warning).
+  """
+  try:
+    from scene_common.rest_client import RESTClient
+  except Exception as exc:
+    logger.warning("Cannot import RESTClient for DB cleanup: %s", exc)
+    return None
+
+  resturl = config.getoption("--resturl")
+  rootcert = config.getoption("--rootcert")
+  user = config.getoption("--user")
+  password = config.getoption("--password")
+  if not password:
+    logger.warning("No REST password available; skipping per-test DB cleanup.")
+    return None
+
+  try:
+    client = RESTClient(resturl, rootcert=rootcert)
+    if not client.authenticate(user, password):
+      logger.warning("REST authentication failed; skipping per-test DB cleanup.")
+      return None
+    return client
+  except Exception as exc:
+    logger.warning("Failed to create RESTClient for DB cleanup: %s", exc)
+    return None
+
+
+def _listEntities(getter, rest):
+  """Return the list of entity dicts for a getter, tolerating errors."""
+  try:
+    res = getter(rest)
+  except Exception as exc:
+    logger.warning("DB snapshot/list call failed: %s", exc)
+    return []
+  if res is None or not hasattr(res, "get"):
+    return []
+  return res.get("results", []) or []
+
+
+def snapshot_db(rest):
+  """Capture the existing entities (keyed by UID) for each managed type."""
+  snapshot = {}
+  for name, getter, *_ in _CLEANUP_ENTITIES:
+    items = _listEntities(getter, rest)
+    snapshot[name] = {item["uid"]: item for item in items if "uid" in item}
+  return snapshot
+
+
+def _restore_scene_fields(rest, scenes_snapshot):
+  """Restore mutated scalar fields on pre-existing scenes."""
+  for uid, original in scenes_snapshot.items():
+    current = None
     try:
-      from datetime import datetime, timezone
-      import time
-      restart_time = datetime.now(timezone.utc)
-      self.docker.compose.restart("scene")
-      time.sleep(0.5)
-      wait_for_services(
-        self.docker, self.project_name,
-        {"scene": WaitConfig(log_pattern="Subscribed to")},
-        since=restart_time,
-      )
-      logger.info("Scene controller restarted and ready.")
-    except Exception as exc:
-      logger.warning("Scene controller restart failed: %s", exc)
+      current = rest.getScene(uid)
+    except Exception:
+      current = None
+    if current is None or not hasattr(current, "get"):
+      continue
+    changed = {}
+    for field in _SCENE_RESTORE_FIELDS:
+      if field in original and current.get(field) != original.get(field):
+        changed[field] = original[field]
+    if changed:
+      try:
+        rest.updateScene(uid, changed)
+      except Exception as exc:
+        logger.warning("Failed to restore scene %s fields %s: %s",
+                       uid, list(changed), exc)
 
-    # Restart the autocalibration service if it is running
-    try:
-      from datetime import datetime, timezone
-      import time
-      containers = self.docker.compose.ps()
-      autocalib_running = any(
-        c.name and "autocalibration" in c.name and "init" not in c.name
-        for c in containers
-      )
-      if autocalib_running:
-        logger.info("Restarting autocalibration service (auth token refresh)...")
-        restart_time = datetime.now(timezone.utc)
-        self.docker.compose.restart("autocalibration")
-        time.sleep(0.5)
-        wait_for_services(
-          self.docker, self.project_name,
-          {"autocalibration": WaitConfig(timeout=120)},
-          since=restart_time,
-        )
-        logger.info("Autocalibration service restarted and ready.")
-    except Exception as exc:
-      logger.warning("Autocalibration restart failed: %s", exc)
+
+def cleanup_db(rest, snapshot):
+  """Restore the database to the snapshot taken before the test."""
+  # Delete entities created during the test.
+  for name, getter, deleter, _creator, _payload in _CLEANUP_ENTITIES:
+    pre = snapshot.get(name, {})
+    for item in _listEntities(getter, rest):
+      uid = item.get("uid")
+      if uid and uid not in pre:
+        try:
+          deleter(rest, uid)
+        except Exception as exc:
+          logger.warning("Failed to delete created %s %s: %s", name, uid, exc)
+
+  # Recreate pre-existing entities the test deleted.
+  for name, getter, _deleter, creator, payload_fn in reversed(_CLEANUP_ENTITIES):
+    pre = snapshot.get(name, {})
+    if not pre:
+      continue
+    current_uids = {item.get("uid") for item in _listEntities(getter, rest)}
+    missing = [orig for uid, orig in pre.items() if uid not in current_uids]
+    if not missing:
+      continue
+    if creator is None:
+      logger.warning(
+        "%d pre-existing %s deleted during the test cannot be recreated "
+        "automatically: %s", len(missing), name,
+        [m.get("uid") for m in missing])
+      continue
+    for orig in missing:
+      try:
+        creator(rest, payload_fn(orig))
+      except Exception as exc:
+        logger.warning("Failed to recreate %s %s: %s", name, orig.get("uid"), exc)
+
+  # Restore mutated scalar fields of surviving pre-existing scenes.
+  _restore_scene_fields(rest, snapshot.get("scenes", {}))
 
 
 # ---------------------------------------------------------------------------
@@ -803,9 +891,10 @@ def scenescape_env(request, _compose_manager, secrets_dir, supass,
   It reads SCENESCAPE_SPEC from the test module to determine which profile
   to activate.
 
-  On teardown the database is automatically restored from the baseline
-  snapshot so that every test starts and ends with an identical
-  environment regardless of what it created or deleted during execution.
+  The baseline database is loaded once at container startup and shared by all
+  tests. Before the test runs this fixture takes a lightweight REST snapshot
+  of the existing entities, and on teardown it restores the database to that
+  exact state so every test leaves the database as it found it.
   """
   # When --env-profiles is active, _env_matrix_setup parametrizes a per-profile
   # FuncTestSpec into callspec.params; prefer that over the module-level default.
@@ -846,18 +935,30 @@ def scenescape_env(request, _compose_manager, secrets_dir, supass,
   # Track that this test used the environment for cleanup scheduling.
   request.session._scenescape_test_ran = True
 
+  # Snapshot the database before the test so we can restore it afterwards.
+  # Tests marked with @pytest.mark.preserve_db skip the cleanup so that a subsequent test
+  # can verify data survives across tests.
+  has_web = "web" in spec.profile.wait_for
+  skip_cleanup = request.node.get_closest_marker("preserve_db") is not None
+  db_rest = None
+  db_snapshot = None
+  if has_web and not skip_cleanup:
+    db_rest = _make_db_rest_client(request.config)
+    if db_rest is not None:
+      try:
+        db_snapshot = snapshot_db(db_rest)
+      except Exception as exc:
+        logger.warning("Pre-test DB snapshot failed: %s", exc)
+        db_snapshot = None
+
   yield env
 
-  # Restore database after every test.
-  # Only applies to profiles that include a web/database service.
-  # Tests marked with @pytest.mark.preserve_db skip the restore so that
-  # a subsequent test can verify data survives.
-  if "web" in spec.profile.wait_for:
-    if not request.node.get_closest_marker("preserve_db"):
-      try:
-        env.restore_db()
-      except Exception as exc:
-        logger.warning("Post-test DB restore failed: %s", exc)
+  # Restore the database to the pre-test snapshot.
+  if db_rest is not None and db_snapshot is not None:
+    try:
+      cleanup_db(db_rest, db_snapshot)
+    except Exception as exc:
+      logger.warning("Post-test DB cleanup failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -1086,8 +1187,9 @@ def result_recorder(request):
 def demo_scene(scenescape_env):
   """Provide the Demo scene UID.
 
-  Database restoration is handled automatically by the scenescape_env
-  fixture teardown, so every test gets a clean slate regardless of
-  whether it uses this fixture.
+  The Demo scene is part of the baseline database loaded once at startup.
+  The scenescape_env fixture snapshots the database before the test and
+  restores it on teardown, so every test gets the baseline Demo scene
+  back, regardless of what it changed.
   """
   return DEMO_SCENE_UID

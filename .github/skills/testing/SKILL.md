@@ -279,7 +279,7 @@ def sample_detection():
 
 - Docker Compose lifecycle managed automatically by pytest fixtures (`scenescape_env`)
 - Tests declare required services via module-level `SCENESCAPE_SPEC` using `FuncTestSpec` + `ServiceProfile`
-- Database restored automatically after each test (unless `@pytest.mark.preserve_db`)
+- The baseline database is loaded once at startup and shared by all tests; each test is snapshotted before it runs and restored to that exact state afterward (created entities deleted, deleted baseline entities recreated, mutated scene fields reverted) unless `@pytest.mark.preserve_db`
 - Test real interactions between services (REST API, MQTT, database)
 - Longer execution time (seconds to minutes)
 - Use real data, not mocks
@@ -617,7 +617,7 @@ import pytest
 def test_api_health():
     pass
 
-# Preserve database state for next test (skip automatic DB restore)
+# Preserve database state for next test (skip automatic per-test DB cleanup)
 @pytest.mark.preserve_db
 def test_persistence_check():
     pass

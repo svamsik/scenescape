@@ -204,7 +204,7 @@ pytest tests/sscape_tests
 | Marker            | Description                                                                       |
 | ----------------- | --------------------------------------------------------------------------------- |
 | `kubernetes_only` | Test runs only with `--backend=kubernetes` or `--backend=all`; skipped for Docker |
-| `preserve_db`     | Skip post-test DB restore so the next test can verify persistence                 |
+| `preserve_db`     | Skip the post-test DB cleanup so the next test can verify persistence              |
 
 ## Using the VS Code Test Extension
 
