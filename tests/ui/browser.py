@@ -3,6 +3,7 @@
 
 import os
 import shutil
+import sys
 import time
 from selenium.webdriver import Firefox
 from selenium.webdriver.firefox.service import Service
@@ -44,6 +45,24 @@ def _find_firefox_binary():
   raise RuntimeError(
     "No valid Firefox executable found. Checked firefox/firefox-esr in PATH "
     "and common system locations."
+  )
+
+def _find_geckodriver():
+  candidates = [
+    os.environ.get("GECKODRIVER_BIN"),
+    str(Path(sys.executable).resolve().parent / "geckodriver"),
+    which("geckodriver"),
+  ]
+
+  for candidate in candidates:
+    if not candidate:
+      continue
+    p = Path(candidate)
+    if p.is_file() and p.stat().st_mode & 0o111:
+      return str(p)
+
+  raise RuntimeError(
+    "geckodriver not found. Run 'make setup-tests' to install it."
   )
 
 class Browser(Firefox):
@@ -92,11 +111,7 @@ class Browser(Firefox):
       "vdms.scenescape.intel.com",
     ]
     options.set_preference("network.dns.localDomains", ",".join(_host_aliases))
-    geckodriver_path = shutil.which("geckodriver")
-    if not geckodriver_path:
-      raise RuntimeError(
-        "geckodriver not found. Run 'make setup-tests' to install it."
-      )
+    geckodriver_path = _find_geckodriver()
     service = Service(geckodriver_path)
 
     super().__init__(options=options, service=service)

@@ -393,7 +393,7 @@ setup-pytest:
 		echo "ERROR: Snap Firefox is incompatible with Selenium. Run ./tools/install-firefox.sh to fix (see tests/README.md)."; \
 		exit 1; \
 	fi
-	@if ! command -v geckodriver > /dev/null 2>&1 && [ ! -f "$(CURDIR)/tests/.venv/bin/geckodriver" ]; then \
+	@if [ ! -f "$(CURDIR)/tests/.venv/bin/geckodriver" ]; then \
 		echo "geckodriver not found — downloading v0.36.0 into tests/.venv/bin/..."; \
 		set -e; \
 		BASE_URL=https://github.com/mozilla/geckodriver/releases; \
